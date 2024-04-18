@@ -5,15 +5,11 @@ import jax.numpy as jnp
 import collections
 
 
-Agent = collections.namedtuple('Agent', ['dir', 'count'])
-Vec2  = collections.namedtuple('Vec2',  ['x', 'y'])
-
-
 @jax.jit
 def agent_init(key):
-    """Generate a random new agent."""
-    x, y = jr.randint(key, shape=(2,), minval=-1, maxval=2)
-    return Agent(Vec2(x, y), 0)
+    """Generate a random new agent with [dx, dy, counter]."""
+    dx, dy = jr.randint(key, shape=(2,), minval=-1, maxval=2)
+    return jnp.array([dx, dy, 0])
 
 
 @partial(jax.jit, static_argnames=['sensor_length'])
@@ -24,4 +20,6 @@ def agent_sensor_positions(agent, sensor_length):
         [[(-1,  1), (-1, -1)], [( 0,  0), ( 0,  0)], [( 1, -1), ( 1,  1)]],
         [[( 0,  1), (-1,  0)], [( 1,  1), (-1,  1)], [( 1,  0), ( 0,  1)]],
     ])
-    return sensor_length * jnp.array(sensor_map[agent.dir.y + 1][agent.dir.x + 1])
+    y = agent[1] + 1
+    x = agent[0] + 1
+    return sensor_length * jnp.array(sensor_map[y][x])

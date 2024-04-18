@@ -25,7 +25,7 @@ class TestAgent(unittest.TestCase):
     def test_sensor_positions_far(self):
         sensor_length = 5
         for agent_dir, *sensors in self.agent_sensors:
-            agent = Agent(Vec2(*agent_dir), 0)
+            agent = jnp.array([*agent_dir, 0])
             left, right = agent_sensor_positions(agent, sensor_length)
 
             sensors = sensor_length * jnp.array(sensors)
@@ -43,7 +43,7 @@ class TestAgent(unittest.TestCase):
     def test_sensor_positions(self):
         sensor_length = 1
         for agent_dir, *sensors in self.agent_sensors:
-            agent = Agent(Vec2(*agent_dir), 0)
+            agent = jnp.array([*agent_dir, 0])
             left, right = agent_sensor_positions(agent, sensor_length)
 
             self.assertTrue(
