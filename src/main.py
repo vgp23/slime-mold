@@ -32,6 +32,10 @@ def main():
     scene = scene_init(height, width, initial_population_density, subkey)
     print(scene)
 
+    key, subkey = jr.split(key, 2)
+    scene = scene_step(scene, subkey)
+    print(scene)
+
 
 if __name__ == '__main__':
     main()

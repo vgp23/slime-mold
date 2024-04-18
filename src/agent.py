@@ -14,7 +14,7 @@ def agent_init(key):
 
 @partial(jax.jit, static_argnames=['sensor_length'])
 def agent_sensor_positions(agent, sensor_length):
-    """Compute the positions of the sensors using a sensor map."""
+    """Compute the relative positions of the sensors using a sensor map."""
     sensor_map = jnp.array([
         [[(-1,  0), ( 0, -1)], [(-1, -1), ( 1, -1)], [( 0, -1), ( 1,  0)]],
         [[(-1,  1), (-1, -1)], [( 0,  0), ( 0,  0)], [( 1, -1), ( 1,  1)]],
