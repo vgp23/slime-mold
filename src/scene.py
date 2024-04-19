@@ -60,3 +60,25 @@ def scene_step(scene, key):
     _, _, trail_grid, chemo_grid, new_mask_grid, new_agent_grid = results
 
     return new_agent_grid, new_mask_grid, trail_grid, chemo_grid
+
+
+def scene_pixelmap(scene, upscale):
+    """Create a pixelmap of the scene on the gpu that can be drawn directly."""
+    agent_grid, mask_grid, trail_grid, chemo_grid = scene
+
+    # TODO add chemo grid to pixelmap
+    # TODO add trail grid to pixelmap
+
+    # create a black and white colormap based on where there are agents
+    colormap = ((1 - mask_grid) * 255).astype(jnp.uint8)
+    # upscale the black and white colormap
+    colormap = jax.image.resize(colormap, jnp.array(colormap.shape) * upscale, method='nearest')
+
+    # create three color channels based on the mask grid
+    pixelmap = jnp.stack((colormap, colormap, colormap), axis=-1)
+
+    # transpose from shape (height, width, 3) to (width, height, 3) for pygame
+    transposed_pixelmap = jnp.transpose(pixelmap, (1, 0, 2))
+
+    # move the data from the gpu to the cpu so pygame can draw it
+    return jax.device_put(transposed_pixelmap, device=jax.devices('cpu')[0])

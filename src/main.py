@@ -5,11 +5,24 @@ import jax.numpy as jnp
 import jax.random as jr
 import matplotlib.pyplot as plt
 import collections
+import pygame
+
+
+def check_interrupt():
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            return True
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_q:
+                return True
+    return False
 
 
 def main():
-    height, width = 3, 5
-    initial_population_density = 0.5
+
+    # define all the hyperparameters for the simulation
+    height, width = 100, 100
+    initial_population_density = 0.1
     sensor_length = 7
 
     trail_deposit = 5
@@ -29,12 +42,36 @@ def main():
     key = jr.PRNGKey(37)
     key, subkey = jr.split(key, 2)
 
+    # initialize pygame
+    upscale = 15
+
+    pygame.init()
+    screen = pygame.display.set_mode(upscale * jnp.array([width, height]))
+    fps_limiter = pygame.time.Clock()
+
+    # initialize the scene data
     scene = scene_init(height, width, initial_population_density, subkey)
-    print(scene)
+    print('init done')
 
     key, subkey = jr.split(key, 2)
     scene = scene_step(scene, subkey)
-    print(scene)
+    print('step done')
+
+    # draw the scene
+    surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, upscale))
+    screen.blit(surface, (0, 0))
+
+    pygame.display.update()
+    print('draw done')
+
+    # fps_limiter.tick(10)
+
+    while True:
+        if check_interrupt():
+            break
+
+    # quit pygame
+    pygame.quit()
 
 
 if __name__ == '__main__':
