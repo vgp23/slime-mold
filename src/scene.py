@@ -6,8 +6,10 @@ import jax.random as jr
 import collections
 
 
-@partial(jax.jit, static_argnames=['height', 'width', 'initial_population_density'])
-def scene_init(height, width, initial_population_density, key):
+@partial(jax.jit, static_argnames=['config_scene'])
+def scene_init(config_scene, key):
+    height, width, _upscale, initial_population_density = config_scene
+
     # generate the positions at which we got agents using the specified density
     key, subkey = jr.split(key, 2)
     mask_grid = jr.uniform(subkey, (height, width)) < initial_population_density
@@ -37,6 +39,9 @@ def _grid_coordinates(height, width):
 def _step(carry, coordinate):
     old_agent_grid, old_mask_grid, trail_grid, chemo_grid, new_mask_grid, new_agent_grid = carry
 
+    agent = old_agent_grid[coordinate]
+    # left_sensor, right_sensor = agent_sensor_positions(agent, 5) # TODO sensor_length)
+
     new_mask_grid = new_mask_grid.at[coordinate].set(old_mask_grid[coordinate])     # TODO: remove me
     new_agent_grid = new_agent_grid.at[coordinate].set(old_agent_grid[coordinate])  # TODO: remove me
 
@@ -44,8 +49,8 @@ def _step(carry, coordinate):
     return carry, None
 
 
-@jax.jit
-def scene_step(scene, key):
+@partial(jax.jit, static_argnames=['config_trail', 'config_chemo', 'config_agent'])
+def scene_step(scene, config_trail, config_chemo, config_agent, key):
     """Perform one update step on the scene by updating each agent in a random order."""
     old_agent_grid, old_mask_grid, trail_grid, chemo_grid = scene
 
@@ -62,7 +67,8 @@ def scene_step(scene, key):
     return new_agent_grid, new_mask_grid, trail_grid, chemo_grid
 
 
-def scene_pixelmap(scene, upscale):
+# @partial(jax.jit, static_argnames=['upscaled_shape'])
+def scene_pixelmap(scene, upscaled_shape):
     """Create a pixelmap of the scene on the gpu that can be drawn directly."""
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
 
@@ -72,7 +78,7 @@ def scene_pixelmap(scene, upscale):
     # create a black and white colormap based on where there are agents
     colormap = ((1 - mask_grid) * 255).astype(jnp.uint8)
     # upscale the black and white colormap
-    colormap = jax.image.resize(colormap, jnp.array(colormap.shape) * upscale, method='nearest')
+    colormap = jax.image.resize(colormap, upscaled_shape, method='nearest')
 
     # create three color channels based on the mask grid
     pixelmap = jnp.stack((colormap, colormap, colormap), axis=-1)
