@@ -10,9 +10,9 @@ import pygame
 
 def initialize_config():
     # define all the hyperparameters for the simulation
-    height, width = 100, 100
+    height, width = 200, 200
     upscale = 5
-    initial_population_density = 0.1
+    initial_population_density = 0.0001
 
     trail_deposit = 5
     trail_damping = 0.1
@@ -53,7 +53,9 @@ def draw(scene, config_scene, screen, font, i):
     height, width, upscale, _ = config_scene
 
     # draw the scene
+
     upscaled_shape = upscale * jnp.array([height, width])
+
     surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, upscaled_shape))
     screen.blit(surface, (0, 0))
 
@@ -64,7 +66,7 @@ def draw(scene, config_scene, screen, font, i):
     pygame.display.update()
 
 
-def run_with_gui(key, num_iter=200):
+def run_with_gui(key, num_iter=500):
     """Run a simulation with gui, this is useful for debugging and getting images."""
     config_scene, config_agent, config_trail, config_chemo = initialize_config()
     height, width, upscale, _ = config_scene
@@ -97,3 +99,4 @@ def run_headless(key):
 if __name__ == '__main__':
     key = jr.PRNGKey(37)
     run_with_gui(key)
+

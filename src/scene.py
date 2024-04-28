@@ -34,12 +34,12 @@ def scene_init(config_scene, key):
 def _grid_coordinates(height, width):
     """Get all coordinates in a 2d grid."""
     X, Y = jnp.meshgrid(jnp.arange(width), jnp.arange(height))
-    return jnp.vstack((X.flatten(), Y.flatten())).T
+    return jnp.vstack((Y.flatten(), X.flatten())).T
 
 
 
 @jax.jit
-def _step(carry, coordinate):
+def _step(carry_in, coordinate):
     ''' Performs an update to a single grid coordinate position'''
 
     def out_of_bounds(ls_coord, rs_coord, height, width):
@@ -66,25 +66,24 @@ def _step(carry, coordinate):
 
     def continue_rotation(carry_in):
         ''' Returns whether any of the sensors are out of bounds, or
-        8 rotations have already occured, in which case agent is stuck.
+        if agent has reached the elimination trigger via rotation
         Used as the condition in the while loop within rotate_agent'''
-
-        ls_coord, rs_coord, _, _, n_rotations, elimination_trigger,\
-            height, width = carry_in
+        ls_coord, rs_coord, agent, sensor_length, \
+        elimination_trigger, height, width = carry_in
         l_oob, r_oob = out_of_bounds(ls_coord, rs_coord, height, width)
         oob = l_oob | r_oob
-        not_stuck_agent = n_rotations < elimination_trigger
+        not_stuck_agent = agent[2] > elimination_trigger
 
         return oob & not_stuck_agent
 
     def rotate_agent(carry_in):
         ''' Rotates agent once, according to rules in Wu et al. Part of 
-        loop in agent_present() function. '''
+        loop in agent_present() function. Used when agent cannot move 
+        forward. '''
+        ls_coord, rs_coord, agent, sensor_length, \
+        elimination_trigger, height, width = carry_in
 
-        ls_coord, rs_coord, agent, sensor_length, n_rotations, elimination_trigger, \
-            height, width = carry_in
         l_oob, r_oob = out_of_bounds(ls_coord, rs_coord, height, width)
-
         # use l_oob, r_oob, and current agent direction as indices to
         # determine how to rotate the agent. 
         # indexing order: (l_oob, r_oob, dx+1, dy+1), all values for
@@ -119,127 +118,277 @@ def _step(carry, coordinate):
         new_left_sensor, new_right_sensor = agent_sensor_positions(agent, sensor_length)
         new_ls_coord = coordinate + new_left_sensor
         new_rs_coord = coordinate + new_right_sensor    
-        # jax.debug.print('rotating: {x}', x=agent)
-        n_rotations += 1
+        # jax.debug.print('Stuck, rotating: {x}', x=agent)
 
-        return (new_ls_coord, new_rs_coord, agent, sensor_length, n_rotations, 
+        return (new_ls_coord, new_rs_coord, agent, sensor_length, 
             elimination_trigger, height, width)    
 
-    def remove_agent(agent_grid, mask_grid, coordinate, _):
+    def remove_agent(agent, coordinate, 
+        scene, config_agent, config_trail, config_chemo, to_update, key):
         ''' Clears the grid positions at a specific coordinate. Used to
         destroy agents in the field. '''
+        # jax.debug.print("Removed agent at position")
+        agent_grid, mask_grid, trail_grid, _ = scene
         agent_grid = agent_grid.at[*coordinate].set(jnp.zeros(3, dtype=jnp.int32))
+        # jax.debug.print("New value at position: {x}", x=agent_grid[*coordinate])
         mask_grid = mask_grid.at[*coordinate].set(False)
 
-        return agent_grid, mask_grid
+        return agent_grid, mask_grid, trail_grid, to_update
 
-    def move_agent(agent_grid, mask_grid, coordinate, _):
-        ''' Moves an agent forward along its velocity vector, by
-        one grid position'''
-        new_pos = coordinate + agent_grid[*coordinate][:2]
-        agent = agent_grid[*coordinate]        
-        agent = agent.at[-1].set(agent[-1]+1)
-        agent_grid, mask_grid = remove_agent(agent_grid, mask_grid, coordinate, _)
+    def rotate_sense(agent, coordinate, scene, 
+        config_agent, config_trail, config_chemo, key):
+        ''' Rotates agent towards the sensor with the highest calculated
+        value as per Wu et al. '''
+        agent_grid, mask_grid, trail_grid, chemo_grid = scene
+        sensor_length, reproduction_trigger, elimination_trigger = config_agent
+        trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+        chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight = config_chemo
 
-        agent_grid = agent_grid.at[*new_pos].set(agent)
-        mask_grid = mask_grid.at[*new_pos].set(True)
-
-        return agent_grid, mask_grid
-
-    def new_orientation(agent_grid, mask_grid, coordinate, key):
-        ''' Randomly selects new velocity for the current agent '''
-        agent = agent_grid[*coordinate]           
-        temp_agent = agent_init(key)
-        agent = agent.at[:2].set(temp_agent[:2])
-        agent = agent.at[-1].set(agent[-1]-1)
-
-        agent_grid = agent_grid.at[*coordinate].set(agent)
-
-        return agent_grid, mask_grid
-
-
-    def attempt_move(agent_grid, mask_grid, coordinate, key):
-        ''' Attempts to move an agent one square in the direction of 
-        their velocity vector. If the square is occupied, randomly
-        chooses a new velocity vector and assigns it to the agent.'''
-        new_pos = coordinate + agent_grid[*coordinate][:2]
-        agent_grid, mask_grid = jax.lax.cond(
-            mask_grid[*new_pos]==False, 
-            move_agent,
-            new_orientation,
-            agent_grid, mask_grid, coordinate, key)
-
-        return agent_grid, mask_grid
-
-
-    def agent_present(agent, sensor_length, agent_grid, mask_grid, coordinate, 
-        reproduction_trigger, elimination_trigger, key, height, width):
-        ''' Computes a position update for the given agent'''
-        # compute coordinates of each sensor
         left_sensor, right_sensor = agent_sensor_positions(agent, sensor_length)
         ls_coord = coordinate + left_sensor
         rs_coord = coordinate + right_sensor
 
+        # jax.debug.print("Comparing sensors at positions: ")
+        # jax.debug.print('{x}', x=ls_coord)
+        # jax.debug.print('{x}', x=rs_coord)
+
+        # compute values of sensors
+        l_sv = chemo_weight*chemo_grid[*ls_coord] + trail_weight*trail_grid[*ls_coord]
+        r_sv = chemo_weight*chemo_grid[*rs_coord] + trail_weight*trail_grid[*rs_coord]
+
+        # jax.debug.print("Sensor values : ")
+        # jax.debug.print('Left: {x}', x=l_sv)
+        # jax.debug.print('Right: {x}', x=r_sv)
+
+        # update direction based on which is larger
+        direction_idx = jnp.select(condlist=[l_sv > r_sv, 
+                                     l_sv < r_sv],
+                    choicelist=[0,1],
+                    default=jr.choice(key, 2))
+
+        new_directions = agent_sensor_directions(agent)
+        agent = agent.at[:2].set(new_directions[direction_idx])
+
+        # jax.debug.print('New agent properties: {x}', x=agent)
+
+        return agent
+
+    def move_agent(agent, coordinate, 
+        scene, config_agent, config_trail, config_chemo, to_update, key):
+        ''' Moves an agent forward along its velocity vector, by
+        one grid position'''
+        agent_grid, mask_grid, trail_grid, chemo_grid = scene
+        sensor_length, reproduction_trigger, elimination_trigger = config_agent
+        trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+        chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight = config_chemo
+
+
+        new_pos = coordinate + agent[:2]    
+        agent = agent.at[-1].set(agent[-1]+1)
+
+        agent_grid, mask_grid, trail_grid, to_update = remove_agent(
+            agent, coordinate, scene, config_agent, config_trail, config_chemo,
+            to_update, key)
+
+        scene = agent_grid, mask_grid, trail_grid, chemo_grid
+
+        # rotate agent towards sensor with highest value
+        key, subkey = jr.split(key, 2)
+        agent = rotate_sense(agent, new_pos, scene, 
+            config_agent, config_trail, config_chemo, subkey)
+
+
+        agent_grid = agent_grid.at[*new_pos].set(agent)
+        mask_grid = mask_grid.at[*new_pos].set(True)
+        # flag this position, so that the agent cannot be moved more than once
+        # (happens when agent is moved to a position not yet iterated over)
+        to_update = to_update.at[*new_pos].set(False)
+
+        # jax.debug.print("Moved agent to position: {x}", x=new_pos)
+        # jax.debug.print("New agent parameters: {x}", x=agent)
+
+        # deposit trail at new position
+        # jax.debug.print("Trail value at new position: {x}", x=trail_grid[*new_pos])
+        trail_grid = trail_grid.at[*new_pos].set(trail_grid[*new_pos] + trail_deposit)
+        # jax.debug.print("Deposited trail at position: {x}", x=new_pos)
+        # jax.debug.print("New trail value value at position: {x}", x=trail_grid[*new_pos])
+
+
+
+        return agent_grid, mask_grid, trail_grid, to_update
+
+    def random_orientation(agent, coordinate, 
+        scene, config_agent, config_trail, config_chemo, to_update, key):
+        ''' Randomly selects new velocity for the current agent '''
+        # jax.debug.print("Could not move, rotating agent instead")
+        agent_grid, mask_grid, trail_grid, chemo_grid = scene
+        sensor_length, reproduction_trigger, elimination_trigger = config_agent
+        trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+         
+        temp_agent = agent_init(key)
+        agent = agent.at[:2].set(temp_agent[:2])
+        agent = agent.at[-1].set(agent[-1]-1)
+        # jax.debug.print("Rotated agent: {x}", x=agent)
+
+        agent_grid = agent_grid.at[*coordinate].set(agent)
+
+        return agent_grid, mask_grid, trail_grid, to_update
+
+
+    def attempt_move(agent, coordinate, 
+        scene, config_agent, config_trail, config_chemo, to_update, key):
+        ''' Attempts to move an agent one square in the direction of 
+        their velocity vector. If the square is occupied, randomly
+        chooses a new velocity vector and assigns it to the agent.'''
+        agent_grid, mask_grid, trail_grid, _ = scene
+        trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+
+        new_pos = coordinate + agent[:2]
+        agent_grid, mask_grid, trail_grid, to_update = jax.lax.cond(
+            mask_grid[*new_pos]==False, 
+            move_agent,
+            random_orientation,
+            agent, coordinate, 
+            scene, config_agent, config_trail, config_chemo, to_update, key)
+
+        return agent_grid, mask_grid, trail_grid, to_update
+
+
+    def reproduce(agent_grid, mask_grid, to_update, old_coordinate, key):
+        ''' Randomly initializes a new agent in the position of its parent
+        agent, if the parent has exceeded the reproduction trigger threshold '''
+        new_agent = agent_init(key)
+        agent_grid = agent_grid.at[*old_coordinate].set(new_agent)
+        mask_grid = mask_grid.at[*old_coordinate].set(True)
+        # don't want to update the children in the current iteration
+        to_update = to_update.at[*old_coordinate].set(False)
+        # jax.debug.print("Reproducing, placed an agent {x} at position {y}", x=new_agent, y=old_coordinate)
+
+        return agent_grid, mask_grid, to_update
+
+
+    def dont_reproduce(agent_grid, mask_grid, to_update, old_coordinate, key):
+        ''' Does nothing, needed for jax.lax.cond in reproduction step'''
+        # jax.debug.print("Not reproducing")
+        return agent_grid, mask_grid, to_update
+
+
+    def agent_present(agent, coordinate, scene, 
+        config_agent, config_trail, config_chemo, to_update, key):
+        ''' Computes a position update for the given agent'''
+        # compute coordinates of each sensor
+        # jax.debug.print("Agent coordinate: {x}", x=coordinate)
+        # jax.debug.print("Original agent: {x}", x=agent)
+
+        agent_grid, mask_grid, trail_grid, chemo_grid = scene
+        sensor_length, reproduction_trigger, elimination_trigger = config_agent
+        trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+        chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight = config_chemo
+
+
+        left_sensor, right_sensor = agent_sensor_positions(agent, sensor_length)
+        ls_coord = coordinate + left_sensor
+        rs_coord = coordinate + right_sensor
+        height, width = mask_grid.shape
+
         # rotate the agent until its sensors are not out of bounds
-        carry_in = (ls_coord, rs_coord, agent, sensor_length, 0, elimination_trigger,
+        carry_in = (ls_coord, rs_coord, agent, sensor_length, elimination_trigger, 
             height, width)
 
         carry_out = jax.lax.while_loop(continue_rotation, rotate_agent, carry_in)
-        _, _, rotated_agent, _, _, _, _, _ = carry_out
+        _, _, agent, _, _, _, _ = carry_out
+
+        # change agent to its rotated form, and repackage the scene
+        agent_grid = agent_grid.at[*coordinate].set(agent)
+        scene = agent_grid, mask_grid, trail_grid, chemo_grid
 
         # if the elimination trigger is met, remove agent. Otherwise, attempt
         # to move forward.
-        agent_grid, mask_grid = jax.lax.cond(
-            rotated_agent[-1]<= elimination_trigger,
+        key, subkey = jr.split(key, 2)
+
+        agent_grid, mask_grid, trail_grid, to_update = jax.lax.cond(
+            agent[-1] < elimination_trigger,
             remove_agent, attempt_move, 
-            agent_grid, mask_grid, coordinate, key)
+            agent, coordinate, scene, 
+            config_agent, config_trail, config_chemo, to_update, subkey)
 
-        return agent_grid, mask_grid
+        # if the reproduction trigger is met, generate new agent in
+        # the current agent's old position 
+        agent_grid, mask_grid, to_update = jax.lax.cond(
+            agent[-1] > reproduction_trigger,
+            reproduce, dont_reproduce, 
+            agent_grid, mask_grid, to_update, coordinate, key)
 
-    def agent_absent(agent, sensor_length, agent_grid, mask_grid, coordinate, 
-        reproduction_trigger, elimination_trigger, key, height, width):
-        ''' Returns an empty grid position'''
+        # jax.debug.print("Agent post initial rotation: {x}", x=agent)
+
+        return agent_grid, mask_grid, trail_grid, to_update
+
+    def agent_absent(agent, coordinate, scene, 
+        config_agent, config_trail, config_chemo, to_update, key):
+        ''' Does nothing, needed for jax conditionals when agent is not present in
+        the grid position or should be ignored. '''
         # jax.debug.print("No agent")
-        return agent_grid, mask_grid
+        return agent_grid, mask_grid, trail_grid, to_update
 
-    agent_grid, mask_grid, trail_grid, chemo_grid, \
-    sensor_length, reproduction_trigger, elimination_trigger, key = carry
+    scene, config_agent, config_trail, config_chemo, to_update, key = carry_in
+
+    agent_grid, mask_grid, trail_grid, chemo_grid = scene
+    sensor_length, reproduction_trigger, elimination_trigger = config_agent
+    trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+    chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight = config_chemo
+
     key, subkey = jr.split(key, 2)
 
-    # jax.debug.print('Coordinate: {x}', x=coordinate)
-    agent = agent_grid[*coordinate]
-    # jax.debug.print('Original agent: {x}', x=agent)    
+    agent = agent_grid[*coordinate]  
+    # if grid has an agent there and to_update is False in this position,
+    # the agent was placed at that position during an update of a previous
+    # coordinate and should be ignored.
     is_agent = mask_grid[*coordinate]
-    height, width = mask_grid.shape
+    is_agent = is_agent & (to_update[*coordinate])
 
-    carry_in = (agent, sensor_length, agent_grid, mask_grid, coordinate,
-        reproduction_trigger, elimination_trigger, key, height, width)
+    # update agent position and trail grid
+    agent_grid, mask_grid, trail_grid, to_update = jax.lax.cond(
+        is_agent, agent_present, agent_absent, 
+        agent, coordinate, scene, config_agent, config_trail, config_chemo, 
+        to_update, subkey)   
 
-    agent_grid, mask_grid = jax.lax.cond(
-        is_agent, agent_present, agent_absent, *carry_in)
+    # package arguments for next iteration
+    scene = agent_grid, mask_grid, trail_grid, chemo_grid
+    config_agent = sensor_length, reproduction_trigger, elimination_trigger
+    config_trail = trail_deposit, trail_damping, trail_filter_size, trail_weight
+    config_chemo = chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight
 
-    # jax.debug.print('Rotated agent: {x}', x=agent_grid[*coordinate])   
-
-    carry_out = (agent_grid, mask_grid, trail_grid, chemo_grid, 
-        sensor_length, reproduction_trigger, elimination_trigger, key)
+    carry_out = scene, config_agent, config_trail, config_chemo, to_update, key
 
     return carry_out, None
 
 
 @partial(jax.jit, static_argnames=['config_trail', 'config_chemo', 'config_agent'])
 def scene_step(scene, config_trail, config_chemo, config_agent, key):
-
     """Perform one update step on the scene by updating each agent in a random order."""
+
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
     sensor_length, reproduction_trigger, elimination_trigger = config_agent
+    trail_deposit, trail_damping, trail_filter_size, trail_weight = config_trail
+    chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight = config_chemo
+
     # generate a shuffled list of coordinates which determines the agent update order.
-    # coordinates are only updated if an agent is on it. 
+    # coordinates are only updated if an agent is on them. 
     coordinates = jr.permutation(key, _grid_coordinates(*mask_grid.shape))
-    results, _ = jax.lax.scan(_step, (*scene, *config_agent, key), coordinates)
+    # boolean grid, used to account for possibility that agent is moved to a 
+    # grid position that has not yet been iterated over, leading to an agent
+    # moving multiple times. 
+    to_update = jnp.full_like(mask_grid, True)
 
-    agent_grid, mask_grid, trail_grid, chemo_grid, _, _, _, _ = results
+    results, _ = jax.lax.scan(_step, 
+        (scene, config_agent, config_trail, config_chemo, to_update, key), coordinates)
 
-    return agent_grid, mask_grid, trail_grid, chemo_grid
+    # TODO: convolve both the chemo and trail with an average filter after 
+    # all agents have been updated + rotated. 
+
+    scene, _, _, _, _, _ = results
+
+    return scene
 
 
 # @partial(jax.jit, static_argnames=['upscaled_shape'])
@@ -248,15 +397,55 @@ def scene_pixelmap(scene, upscaled_shape):
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
 
     # TODO add chemo grid to pixelmap
-    # TODO add trail grid to pixelmap
 
     # create a black and white colormap based on where there are agents
-    colormap = ((1 - mask_grid) * 255).astype(jnp.uint8)
+    agent_colormap = ((1 - mask_grid) * 255).astype(jnp.uint8)
     # upscale the black and white colormap
-    colormap = jax.image.resize(colormap, upscaled_shape, method='nearest')
+    agent_colormap = jax.image.resize(agent_colormap, upscaled_shape, method='nearest')
 
-    # create three color channels based on the mask grid
-    pixelmap = jnp.stack((colormap, colormap, colormap), axis=-1)
+    # create colormap for trails and food source, blue and red respectively.
+    # every pixel within the trail and chemo grid with a non-zero value will be
+    # overlaid onto the agent colormap, provided an agent isn't in that position. 
+
+    # upscale trail and chemo maps
+    trail_colormap = jax.image.resize(trail_grid, upscaled_shape, method='nearest').astype(jnp.uint8)
+    chemo_colormap = jax.image.resize(chemo_grid, upscaled_shape, method='nearest').astype(jnp.uint8)
+
+    # To achieve the desired color,the target color channel is set to 255, 
+    # and the other two are *decreased* in proportion to the value in the 
+    # trail/chemo map. This makes low values close to white, and high 
+    # values a dark color.
+
+    trail_colormap = jnp.full_like(trail_colormap, 255)-trail_colormap
+    trail_colormap = jnp.maximum(trail_colormap, 1) # Clip to min of 1
+    chemo_colormap = jnp.full_like(chemo_colormap, 255)-chemo_colormap
+    chemo_colormap = jnp.maximum(chemo_colormap, 1) # Clip to min of 1
+
+    # getting rid of pixels where agents are
+    agent_mask = agent_colormap==255
+    trail_colormap = jnp.multiply(trail_colormap, agent_mask)
+    chemo_colormap = jnp.multiply(chemo_colormap, agent_mask)
+
+    # trail
+    trail_pixels = trail_colormap > 0
+    not_trail_pixels = trail_colormap == 0
+
+    red_channel = jnp.multiply(agent_colormap, not_trail_pixels) + \
+        jnp.multiply(trail_colormap, trail_pixels)
+
+    green_channel = jnp.multiply(agent_colormap, not_trail_pixels) + \
+        jnp.multiply(trail_colormap, trail_pixels)
+
+    blue_channel = jnp.multiply(agent_colormap, not_trail_pixels) + \
+        trail_pixels*255
+
+
+    # chemo TODO: debug this, doesn't work as it should. Need to also
+    # figure out a way of combining the colors for trail and chemo
+    # chemo_pixels = jnp.argwhere(chemo_colormap > 0)
+
+    pixelmap = jnp.stack((red_channel, green_channel, blue_channel), axis=-1)
+
 
     # transpose from shape (height, width, 3) to (width, height, 3) for pygame
     transposed_pixelmap = jnp.transpose(pixelmap, (1, 0, 2))
@@ -264,32 +453,41 @@ def scene_pixelmap(scene, upscaled_shape):
     # move the data from the gpu to the cpu so pygame can draw it
     return jax.device_put(transposed_pixelmap, device=jax.devices('cpu')[0])
 
-# if __name__ == '__main__':
-#     height = 100
-#     width= 150
-#     upscale = 5 
+if __name__ == '__main__':
 
-#     sensor_length = 2
-#     sensor_length = 7
-#     reproduction_trigger = 15
-#     elimination_trigger = -10
+    sensor_length = 7
+    reproduction_trigger = 15
+    elimination_trigger = -10
+    config_agent = (sensor_length, reproduction_trigger, elimination_trigger)
 
 
-#     initial_population_density = 0.99
-#     config_scene = (height, width, upscale, initial_population_density)
-#     key = jr.PRNGKey(42)
+    trail_deposit = 5
+    trail_damping = 0.1
+    trail_filter_size = 3
+    trail_weight = 0.4
+    config_trail = (trail_deposit, trail_damping, trail_filter_size, trail_weight)
 
-#     agent_grid, mask_grid, trail_grid, chemo_grid = scene_init(config_scene, key)
+    chemo_deposit = 10
+    chemo_damping = 0.2
+    chemo_filter_size = 5
+    chemo_weight = 1 - trail_weight
+    config_chemo = (chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight)  
 
-#     scene = (agent_grid, mask_grid, trail_grid, chemo_grid)
-#     config_agent = (sensor_length, reproduction_trigger, elimination_trigger)
+    height = 10
+    width= 15
+    upscale = 5 
+    initial_population_density = 0.1
+    config_scene = (height, width, upscale, initial_population_density)  
 
-#     print(agent_grid.shape)
+    key = jr.PRNGKey(42)
 
-#     agent_grid, mask_grid, trail_grid, chemo_grid = scene_step(scene, 0,0, config_agent, key)
-#     # jax.debug.print("done")
+    agent_grid, mask_grid, trail_grid, chemo_grid = scene_init(config_scene, key)
 
-#     print(_grid_coordinates(height, width)[-50:])
+
+    scene = (agent_grid, mask_grid, trail_grid, chemo_grid)
+
+    agent_grid, mask_grid, trail_grid, chemo_grid = scene_step(
+        scene, config_trail, config_chemo, config_agent, key)
 
 
 
