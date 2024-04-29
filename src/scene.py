@@ -7,9 +7,10 @@ import collections
 import numpy as np
 
 
-@partial(jax.jit, static_argnames=['config_scene'])
-def scene_init(config_scene, key):
-    height, width, _upscale, initial_population_density = config_scene
+
+def scene_init(config_scene, config_chemo, key):
+    height, width, _, initial_population_density, food_sources, _ = config_scene
+    chemo_deposit, _, _, _ = config_chemo
 
     # generate the positions at which we got agents using the specified density
     key, subkey = jr.split(key, 2)
@@ -25,9 +26,22 @@ def scene_init(config_scene, key):
     ))(mask_grid, subkeys)
 
     trail_grid = jnp.zeros((height, width))  # contains trail data
-    chemo_grid = jnp.zeros((height, width))  # contains chemo-nutrient/food data
 
-    return agent_grid, mask_grid, trail_grid, chemo_grid
+    # contains chemo-nutrient/food data. Food sources are initialized as 3x3
+    # arrays, the extra dimensions here allow food source placement at the very
+    # edges (though the 3x3 size will get clipped). Also need a binary mask of
+    # the initial chemo grid, to keep food source values constant across iterations.
+    chemo_grid = jnp.zeros((height+2, width+2))
+    for food_source in food_sources:
+        chemo_grid = chemo_grid.at[
+            food_source[0]:food_source[0] + 3,
+            food_source[1]:food_source[1] + 3
+        ].set(chemo_deposit)
+
+    chemo_grid = chemo_grid[1:-1, 1:-1]
+    food_source_grid = chemo_grid > 0
+
+    return agent_grid, mask_grid, trail_grid, chemo_grid, food_source_grid
 
 
 @partial(jax.jit, static_argnames=['height', 'width'])
@@ -303,7 +317,9 @@ def _step(carry_in, coordinate):
 @partial(jax.jit, static_argnames=['config_trail', 'config_chemo', 'config_agent'])
 def scene_step(scene, config_trail, config_chemo, config_agent, key):
     """Perform one update step on the scene by updating each agent in a random order."""
-    agent_grid, mask_grid, trail_grid, chemo_grid = scene
+    agent_grid, mask_grid, trail_grid, chemo_grid, food_source_grid = scene
+    _, trail_damping, trail_filter_size, _ = config_trail
+    chemo_deposit, chemo_damping, chemo_filter_size, _ = config_chemo
 
     # generate a shuffled list of coordinates which determines the agent update order.
     # coordinates are only updated if an agent is on them.
@@ -318,64 +334,97 @@ def scene_step(scene, config_trail, config_chemo, config_agent, key):
     (scene, _, _, _, _, _), _ = jax.lax.scan(_step,
         (scene, config_agent, config_trail, config_chemo, to_update, key), coordinates)
 
-    # TODO convolve both the chemo and trail with an average filter after agent update
-    # TODO add chemo and trail dampening
+    # convolve both the chemo and trail with an average filter after
+    # all agents have been updated + rotated.
+    _, _, trail_grid, chemo_grid, food_source_grid = scene
 
+    # chemo grid
+    chemo_kernel = jnp.ones((chemo_filter_size, chemo_filter_size)) * (1 / chemo_filter_size**2)
+    chemo_grid = jax.scipy.signal.convolve2d(chemo_grid, chemo_kernel, mode='same')
+    chemo_grid = chemo_grid * (1 - chemo_damping)
+
+    # reset the values in the food sources to the default
+    not_food_source_grid = food_source_grid == 0
+    chemo_grid = jnp.multiply(not_food_source_grid, chemo_grid) + food_source_grid * chemo_deposit
+
+    # trail grid
+    trail_kernel = jnp.ones((trail_filter_size, trail_filter_size)) * (1 / trail_filter_size**2)
+    trail_grid = jax.scipy.signal.convolve2d(trail_grid, trail_kernel, mode='same')
+    trail_grid = trail_grid * (1 - trail_damping)
+
+    scene = agent_grid, mask_grid, trail_grid, chemo_grid, food_source_grid
     return scene
 
 
 # @partial(jax.jit, static_argnames=['upscaled_shape'])
-def scene_pixelmap(scene, upscaled_shape):
+def scene_pixelmap(scene, upscaled_shape, config_display):
     """Create a pixelmap of the scene on the gpu that can be drawn directly."""
-    agent_grid, mask_grid, trail_grid, chemo_grid = scene
+    agent_grid, mask_grid, trail_grid, chemo_grid, food_source_grid = scene
+    display_chemo, display_trail, display_agents, display_food = config_display
 
     # create a black and white colormap based on where there are agents
-    agent_colormap = ((1 - mask_grid) * 255).astype(jnp.uint8)
+    agent_colormap = ((1 - mask_grid) * 255)
     # upscale the black and white colormap
     agent_colormap = jax.image.resize(agent_colormap, upscaled_shape, method='nearest')
 
-    # Create colormap for trails and food source, blue and red respectively.
-    # Every pixel within the trail and chemo grid with a non-zero value will be
-    # overlaid onto the agent colormap, provided an agent isn't in that position.
-
+    # create colormap for trails and food source, blue and red respectively
     # upscale trail and chemo maps
-    trail_colormap = jax.image.resize(trail_grid, upscaled_shape, method='nearest').astype(jnp.uint8)
-    chemo_colormap = jax.image.resize(chemo_grid, upscaled_shape, method='nearest').astype(jnp.uint8)
+    trail_colormap = jax.image.resize(trail_grid, upscaled_shape, method='nearest')
+    chemo_colormap = jax.image.resize(chemo_grid, upscaled_shape, method='nearest')
+    food_source_colormap = jax.image.resize(food_source_grid, upscaled_shape, method='nearest')
 
     # To achieve the desired color,the target color channel is set to 255,
     # and the other two are *decreased* in proportion to the value in the
     # trail/chemo map. This makes low values close to white, and high
     # values a dark color.
 
-    trail_colormap = jnp.full_like(trail_colormap, 255) - trail_colormap
-    trail_colormap = jnp.maximum(trail_colormap, 1) # Clip to min of 1
-    chemo_colormap = jnp.full_like(chemo_colormap, 255) - chemo_colormap
-    chemo_colormap = jnp.maximum(chemo_colormap, 1) # Clip to min of 1
+    red_channel = jnp.full_like(agent_colormap, 255)
+    green_channel = jnp.full_like(agent_colormap, 255)
+    blue_channel = jnp.full_like(agent_colormap, 255)
 
-    # getting rid of pixels where agents are
-    agent_mask = agent_colormap == 255
-    trail_colormap = jnp.multiply(trail_colormap, agent_mask)
-    chemo_colormap = jnp.multiply(chemo_colormap, agent_mask)
+    if display_chemo:
+        # intensity transformation, strictly for visual purposes
+        # clipping the map back to [0, 255]
+        intensity = 30
+        chemo_colormap = jnp.minimum(intensity * chemo_colormap, 255)
+        chemo_colormap = jnp.full_like(chemo_colormap, 255) - chemo_colormap # inverting the map
 
-    # trail
-    trail_pixels = trail_colormap > 0
-    not_trail_pixels = trail_colormap == 0
+        red_channel = jnp.full_like(chemo_colormap, 255)
+        green_channel = chemo_colormap
+        blue_channel = jnp.copy(chemo_colormap)
 
-    red_channel = jnp.multiply(agent_colormap, not_trail_pixels) + \
-        jnp.multiply(trail_colormap, trail_pixels)
+    if display_trail:
+        # intensity transformation, strictly for visual purposes
+        # clipping the map back to [0, 255]
+        intensity = 10
+        trail_colormap = jnp.minimum(intensity * trail_colormap, 255)
+        trail_colormap = jnp.full_like(trail_colormap, 255) - trail_colormap # inverting the map
 
-    green_channel = jnp.multiply(agent_colormap, not_trail_pixels) + \
-        jnp.multiply(trail_colormap, trail_pixels)
+        trail_pixels = trail_colormap < 255
+        not_trail_pixels = trail_colormap == 255
 
-    blue_channel = jnp.multiply(agent_colormap, not_trail_pixels) + \
-        trail_pixels*255
+        red_channel = jnp.multiply(red_channel, not_trail_pixels) + jnp.multiply(trail_colormap, trail_pixels)
+        green_channel = jnp.multiply(green_channel, not_trail_pixels) + jnp.multiply(trail_colormap, trail_pixels)
+        blue_channel = jnp.multiply(blue_channel, not_trail_pixels) + jnp.multiply(jnp.full_like(blue_channel, 255), trail_pixels)
 
+    if display_agents:
+        agent_pixels = agent_colormap == 0
+        not_agent_pixels = agent_colormap == 255
 
-    # chemo TODO: debug this, doesn't work as it should. Need to also
-    # figure out a way of combining the colors for trail and chemo
-    # chemo_pixels = jnp.argwhere(chemo_colormap > 0)
+        red_channel = jnp.multiply(red_channel, not_agent_pixels) + jnp.multiply(agent_colormap, agent_pixels)
+        green_channel = jnp.multiply(green_channel, not_agent_pixels) + jnp.multiply(agent_colormap, agent_pixels)
+        blue_channel = jnp.multiply(blue_channel, not_agent_pixels) + jnp.multiply(agent_colormap, agent_pixels)
 
-    pixelmap = jnp.stack((red_channel, green_channel, blue_channel), axis=-1)
+    if display_food:
+        # placing food sources on top of everything
+        food_source_pixels = food_source_colormap > 0
+        not_food_source_pixels = food_source_colormap == 0
+
+        red_channel = jnp.multiply(red_channel, not_food_source_pixels) + jnp.multiply(jnp.full_like(red_channel, 255), food_source_pixels)
+        green_channel = jnp.multiply(green_channel, not_food_source_pixels) + jnp.multiply(jnp.zeros_like(green_channel), food_source_pixels)
+        blue_channel = jnp.multiply(blue_channel, not_food_source_pixels) + jnp.multiply(jnp.zeros_like(blue_channel), food_source_pixels)
+
+    pixelmap = jnp.stack((red_channel.astype(jnp.uint8), green_channel.astype(jnp.uint8), blue_channel.astype(jnp.uint8)), axis=-1)
 
     # transpose from shape (height, width, 3) to (width, height, 3) for pygame
     transposed_pixelmap = jnp.transpose(pixelmap, (1, 0, 2))
