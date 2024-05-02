@@ -22,7 +22,7 @@ def agent_init(key):
 def agent_sensor_positions(agent, sensor_length):
     """Compute the relative positions of the sensors using a sensor map."""
 
-    # velocities with 0,0 are not valid; -5 values make this obvious for 
+    # velocities with 0,0 are not valid; -5 values make this obvious for
     # debbugging (this index should never be reached)
     sensor_map = jnp.array([
         [[(-1,  0), ( 0, -1)], [(-1, -1), ( 1, -1)], [( 0, -1), ( 1,  0)]],
@@ -33,11 +33,12 @@ def agent_sensor_positions(agent, sensor_length):
     x = agent[0] + 1
     return sensor_length * jnp.array(sensor_map[y][x])
 
+
 @jax.jit
 def agent_sensor_directions(agent):
     """Compute the directions of the sensors using a sensor map."""
 
-    # velocities with 0,0 are not valid; -5 values make this obvious for 
+    # velocities with 0,0 are not valid; -5 values make this obvious for
     # debbugging (this index should never be reached)
     sensor_map = jnp.array([
         [[(-1,  0), ( 0, -1)], [(-1, -1), ( 1, -1)], [( 0, -1), ( 1,  0)]],

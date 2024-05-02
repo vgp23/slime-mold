@@ -12,7 +12,7 @@ def initialize_config():
     # define all the hyperparameters for the simulation
     height, width = 200, 200
     upscale = 5
-    initial_population_density = 0.0001
+    initial_population_density = 0.01
 
     trail_deposit = 5
     trail_damping = 0.1
@@ -53,9 +53,7 @@ def draw(scene, config_scene, screen, font, i):
     height, width, upscale, _ = config_scene
 
     # draw the scene
-
     upscaled_shape = upscale * jnp.array([height, width])
-
     surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, upscaled_shape))
     screen.blit(surface, (0, 0))
 
