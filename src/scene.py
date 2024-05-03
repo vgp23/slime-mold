@@ -31,15 +31,15 @@ def scene_init(config_scene, key):
 
 
 @partial(jax.jit, static_argnames=['height', 'width'])
-def _grid_coordinates(height, width):
+def grid_coordinates(height, width):
     """Get all coordinates in a 2d grid."""
     X, Y = jnp.meshgrid(jnp.arange(width), jnp.arange(height))
     return jnp.vstack((Y.flatten(), X.flatten())).T
 
 
+@partial(jax.jit, static_argnames=['height', 'width'])
 def out_of_bounds(ls_coord, rs_coord, height, width):
-    '''Returns whether the left or right sensor(s) are out
-    of bounds of the field'''
+    '''Returns whether the left or right sensor(s) are out of bounds of the field.'''
 
     # Goes through all possible out-of-bounds cases individually,
     # jax doesn't allow them to all be evaluated at once.
@@ -59,9 +59,9 @@ def out_of_bounds(ls_coord, rs_coord, height, width):
 
 
 def continue_rotation(carry_in):
-    '''Returns whether any of the sensors are out of bounds, or
-    if agent has reached the elimination trigger via rotation
-    Used as the condition in the while loop within rotate_agent'''
+    '''Returns whether any of the sensors are out of bounds, or if agent has
+    reached the elimination trigger via rotation Used as the condition in the
+    while loop within rotate_agent'''
     coordinate, (ls_coord, rs_coord, agent, sensor_length, elimination_trigger, height, width) = carry_in
     l_oob, r_oob = out_of_bounds(ls_coord, rs_coord, height, width)
     oob = l_oob | r_oob
@@ -70,9 +70,8 @@ def continue_rotation(carry_in):
 
 
 def rotate_agent(carry_in):
-    ''' Rotates agent once, according to rules in Wu et al. Part of
-    loop in agent_present() function. Used when agent cannot move
-    forward. '''
+    '''Rotates agent once, according to rules in Wu et al. Part of loop in
+    agent_present() function. Used when agent cannot move forward.'''
     coordinate, (ls_coord, rs_coord, agent, sensor_length, elimination_trigger, height, width) = carry_in
 
     l_oob, r_oob = out_of_bounds(ls_coord, rs_coord, height, width)
@@ -115,10 +114,9 @@ def rotate_agent(carry_in):
         elimination_trigger, height, width)
 
 
-def rotate_sense(agent, coordinate, scene,
-    config_agent, config_trail, config_chemo, key):
-    ''' Rotates agent towards the sensor with the highest calculated
-    value as per Wu et al. '''
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
+def rotate_sense(agent, coordinate, scene, config_agent, config_trail, config_chemo, key):
+    '''Rotates agent towards the sensor with the highest calculated value as per Wu et al.'''
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
     sensor_length, _, _   = config_agent
     _, _, _, trail_weight = config_trail
@@ -129,14 +127,15 @@ def rotate_sense(agent, coordinate, scene,
     rs_coord = coordinate + right_sensor
 
     # compute values of sensors
-    l_sv = chemo_weight*chemo_grid[*ls_coord] + trail_weight*trail_grid[*ls_coord]
-    r_sv = chemo_weight*chemo_grid[*rs_coord] + trail_weight*trail_grid[*rs_coord]
+    l_sv = chemo_weight * chemo_grid[*ls_coord] + trail_weight * trail_grid[*ls_coord]
+    r_sv = chemo_weight * chemo_grid[*rs_coord] + trail_weight * trail_grid[*rs_coord]
 
     # update direction based on which is larger
-    direction_idx = jnp.select(condlist=[l_sv > r_sv,
-                                    l_sv < r_sv],
-                choicelist=[0,1],
-                default=jr.choice(key, 2))
+    direction_idx = jnp.select(
+        condlist=[l_sv > r_sv, l_sv < r_sv],
+        choicelist=[0,1],
+        default=jr.choice(key, 2)
+    )
 
     new_directions = agent_sensor_directions(agent)
     agent = agent.at[:2].set(new_directions[direction_idx])
@@ -144,8 +143,9 @@ def rotate_sense(agent, coordinate, scene,
     return agent
 
 
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def move_agent(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
-    '''Moves an agent forward along its direction vector, by one grid position'''
+    '''Moves an agent forward along its direction vector, by one grid position.'''
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
     trail_deposit, _, _, _ = config_trail
 
@@ -174,6 +174,7 @@ def move_agent(agent, coordinate, scene, config_agent, config_trail, config_chem
     return agent_grid, mask_grid, trail_grid, to_update
 
 
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def random_orientation(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Randomly selects new direction for the current agent.'''
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
@@ -186,6 +187,7 @@ def random_orientation(agent, coordinate, scene, config_agent, config_trail, con
     return agent_grid, mask_grid, trail_grid, to_update
 
 
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def attempt_move(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Attempts to move an agent one square in the direction of their direction vector.
     If the square is occupied, randomly choose a new direction vector and assign it to the agent.'''
@@ -200,6 +202,7 @@ def attempt_move(agent, coordinate, scene, config_agent, config_trail, config_ch
     return agent_grid, mask_grid, trail_grid, to_update
 
 
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def remove_agent(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Clears the grid positions at a specific coordinate. Used to destroy agents in the field.'''
     agent_grid, mask_grid, trail_grid, _ = scene
@@ -224,6 +227,7 @@ def dont_reproduce(agent_grid, mask_grid, to_update, old_coordinate, key):
     return agent_grid, mask_grid, to_update
 
 
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def agent_present(coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Computes a position update for the given agent.'''
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
@@ -265,6 +269,7 @@ def agent_present(coordinate, scene, config_agent, config_trail, config_chemo, t
     return agent_grid, mask_grid, trail_grid, to_update
 
 
+@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def agent_absent(coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Does nothing, needed for jax.lax.cond in step.'''
     agent_grid, mask_grid, trail_grid, chemo_grid = scene
@@ -302,7 +307,7 @@ def scene_step(scene, config_trail, config_chemo, config_agent, key):
 
     # generate a shuffled list of coordinates which determines the agent update order.
     # coordinates are only updated if an agent is on them.
-    coordinates = jr.permutation(key, _grid_coordinates(*mask_grid.shape))
+    coordinates = jr.permutation(key, grid_coordinates(*mask_grid.shape))
 
     # boolean grid, used to account for possibility that agent is moved to a
     # grid position that has not yet been iterated over, leading to an agent

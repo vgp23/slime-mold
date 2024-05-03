@@ -6,6 +6,7 @@ import jax.random as jr
 import matplotlib.pyplot as plt
 import collections
 import pygame
+import time
 
 
 def initialize_config():
@@ -64,7 +65,7 @@ def draw(scene, config_scene, screen, font, i):
     pygame.display.update()
 
 
-def run_with_gui(key, num_iter=500):
+def run_with_gui(key, num_iter=100):
     """Run a simulation with gui, this is useful for debugging and getting images."""
     config_scene, config_agent, config_trail, config_chemo = initialize_config()
     height, width, upscale, _ = config_scene
@@ -89,12 +90,43 @@ def run_with_gui(key, num_iter=500):
     pygame.quit()
 
 
-def run_headless(key):
-    """Run simulations headless on the gpu, this is super efficient."""
-    pass
+def run_headless(key, num_iter=100):
+    """Run simulations headless on the gpu without gui."""
+    config_scene, config_agent, config_trail, config_chemo = initialize_config()
+
+    key, subkey, *subkeys = jr.split(key, num_iter + 2)
+    scene = scene_init(config_scene, subkey)
+
+    _, scenes = jax.lax.scan(
+        lambda scene, k: (scene_step(scene, config_trail, config_chemo, config_agent, k), None),
+        scene,
+        jnp.array(subkeys),
+        length=num_iter,
+    )
+
+    # height, width, upscale, _ = config_scene
+    # pygame.init()
+
+    # font = pygame.font.Font(None, 48)
+    # screen = pygame.display.set_mode(upscale * jnp.array([width, height]))
+
+    # draw(scenes[-1], config_scene, screen, font, -1)
+
+    # while True:
+    #     if check_interrupt():
+    #         break
+
+    # pygame.quit()
 
 
 if __name__ == '__main__':
     key = jr.PRNGKey(37)
-    run_with_gui(key)
+
+    # t0 = time.time()
+    # run_with_gui(key, num_iter=100)
+    # print(time.time() - t0)
+
+    t0 = time.time()
+    run_headless(key, num_iter=100)
+    print(time.time() - t0)
 
