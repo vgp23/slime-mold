@@ -32,6 +32,7 @@ def scene_init(config_scene, config_chemo, key):
     # edges (though the 3x3 size will get clipped). Also need a binary mask of
     # the initial chemo grid, to keep food source values constant across iterations.
     chemo_grid = jnp.zeros((height + 2, width + 2))
+    # TODO fix this so it can be jit compiled
     for food in foods:
         chemo_grid = chemo_grid.at[
             food[0]:food[0] + 3,

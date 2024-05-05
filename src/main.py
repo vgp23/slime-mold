@@ -124,7 +124,7 @@ def run_with_gui(key, num_iter=20000):
     pygame.quit()
 
 
-# @partial(jax.jit, static_argnames=['num_iter'])
+@partial(jax.jit, static_argnames=['num_iter'])
 def run_headless(key, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
     config_scene, config_agent, config_trail, config_chemo = initialize_config()
@@ -155,19 +155,19 @@ def run_headless(key, num_iter=20000):
 
 
 if __name__ == '__main__':
-    key = jr.PRNGKey(37)
-
     # force run all computations on the cpu
-    jax.config.update('jax_platform_name', jax.devices('cpu')[0])
+    jax.config.update('jax_platform_name', 'cpu')
 
     x = jnp.square(2)
-    print(repr(x.device_buffer.device()))
+    print(repr(x.addressable_data(0).devices()))
 
-    # t0 = time.time()
-    # run_with_gui(key, num_iter=100)
-    # print(time.time() - t0)
+    key = jr.PRNGKey(37)
 
     t0 = time.time()
-    run_headless(key, num_iter=100)
+    run_with_gui(key, num_iter=1000)
     print(time.time() - t0)
+
+    # t0 = time.time()
+    # run_headless(key, num_iter=100)
+    # print(time.time() - t0)
 
