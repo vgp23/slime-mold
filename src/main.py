@@ -233,7 +233,7 @@ if __name__ == '__main__':
 
     # # run an experiment headless
     t0 = time.time()
-    scenes = run_headless(config, key, num_iter=100)
+    scenes = run_headless(config, key, num_iter=1000)
     print(time.time() - t0)
 
     # # visualise one scene from the headless run
