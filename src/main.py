@@ -36,7 +36,7 @@ def initialize_config():
 
     # downscaled
     height, width = 100, 100
-    upscale = 4
+    upscale = 10
     initial_population_density = 0.5
 
     trail_deposit = 5
@@ -53,11 +53,12 @@ def initialize_config():
     reproduction_trigger = 15
     elimination_trigger = -10
 
-    food_sources = jr.choice(jr.PRNGKey(21), jnp.arange(10,90), shape=(10,2))
+    num_food_sources = 10
+    food_sources = jr.choice(jr.PRNGKey(21), jnp.arange(10, 90), shape=(num_food_sources, 2))
 
     # visualization settings
     display_chemo = True
-    display_trail = False
+    display_trail = True
     display_agents = True
     display_food = True
 
@@ -123,12 +124,13 @@ def run_with_gui(key, num_iter=20000):
     pygame.quit()
 
 
+# @partial(jax.jit, static_argnames=['num_iter'])
 def run_headless(key, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
     config_scene, config_agent, config_trail, config_chemo = initialize_config()
 
     key, subkey, *subkeys = jr.split(key, num_iter + 2)
-    scene = scene_init(config_scene, subkey)
+    scene = scene_init(config_scene, config_chemo, subkey)
 
     _, scenes = jax.lax.scan(
         lambda scene, k: (scene_step(scene, config_trail, config_chemo, config_agent, k), None),
@@ -154,6 +156,12 @@ def run_headless(key, num_iter=20000):
 
 if __name__ == '__main__':
     key = jr.PRNGKey(37)
+
+    # force run all computations on the cpu
+    jax.config.update('jax_platform_name', jax.devices('cpu')[0])
+
+    x = jnp.square(2)
+    print(repr(x.device_buffer.device()))
 
     # t0 = time.time()
     # run_with_gui(key, num_iter=100)
