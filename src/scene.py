@@ -7,6 +7,7 @@ import collections
 import numpy as np
 
 
+# TODO make food_size static arg so it can be jit compiled
 def scene_init(config_scene, config_food, config_chemo, key):
     height, width, _, initial_population_density, _ = config_scene
     foods, food_amount, food_size = config_food
@@ -371,7 +372,7 @@ def scene_pixelmap(scene, upscaled_shape, config_display):
     blue_channel = jnp.full_like(agent_colormap, 255)
 
     if display_chemo:
-        # TODO make chemo spreading visual when trails are also visibible
+        # TODO make chemo spreading visual when trails are also visible
         # intensity transformation, strictly for visual purposes
         # clipping the map back to [0, 255]
         intensity = 30

@@ -75,6 +75,20 @@ def initialize_config(key):
     return config_scene, config_food, config_agent, config_trail, config_chemo
 
 
+def wait_for_spacebar():
+    while True:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                return True
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:
+                    return True
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    return False
+
+
 def check_interrupt():
     """Check if the user tries to close the program."""
     for event in pygame.event.get():
@@ -83,6 +97,12 @@ def check_interrupt():
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_q:
                 return True
+
+        # hacky way of pauzing the animation
+        if event.type == pygame.KEYDOWN:
+            if event.key == pygame.K_SPACE:
+                return wait_for_spacebar()
+
     return False
 
 
