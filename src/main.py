@@ -10,7 +10,7 @@ import pygame
 import time
 
 
-def initialize_config():
+def initialize_config(key):
     # define all the hyperparameters for the simulation
 
     # original parameters
@@ -32,9 +32,6 @@ def initialize_config():
     # reproduction_trigger = 15
     # elimination_trigger = -10
 
-    # food_sources = jr.choice(jr.PRNGKey(21), jnp.arange(10,190), shape=(10,2))
-
-    # downscaled
     height, width = 100, 100
     upscale = 10
     initial_population_density = 0.5
@@ -45,16 +42,21 @@ def initialize_config():
     trail_weight = 0.4
 
     chemo_deposit = 10
-    chemo_damping = 0.4 # DOUBLED, less spreading
-    chemo_filter_size = 3 # DECREASED, keep odd
+    chemo_damping = 0.2
+    chemo_filter_size = 5
     chemo_weight = 1 - trail_weight
 
     sensor_length = 4 # DECREASED
     reproduction_trigger = 15
     elimination_trigger = -10
 
-    num_food_sources = 10
-    food_sources = jr.choice(jr.PRNGKey(21), jnp.arange(10, 90), shape=(num_food_sources, 2))
+    food_amount = 10
+    food_size = 3
+
+    key, subkey1, subkey2 = jr.split(key, 3)
+    foods_y = jr.choice(subkey1, jnp.arange(height - food_size), shape=(food_amount,))
+    foods_x = jr.choice(subkey2, jnp.arange(width - food_size), shape=(food_amount,))
+    foods = jnp.stack((foods_y, foods_x), axis=-1)
 
     # visualization settings
     display_chemo = True
@@ -63,13 +65,14 @@ def initialize_config():
     display_food = True
 
     # pack the config info into smaller variables for convenience
+    config_agent = (sensor_length, reproduction_trigger, elimination_trigger)
     config_trail = (trail_deposit, trail_damping, trail_filter_size, trail_weight)
     config_chemo = (chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight)
-    config_agent = (sensor_length, reproduction_trigger, elimination_trigger)
     config_display = (display_chemo, display_trail, display_agents, display_food)
-    config_scene = (height, width, upscale, initial_population_density, food_sources, config_display)
+    config_food = (foods, food_amount, food_size)
+    config_scene = (height, width, upscale, initial_population_density, config_display)
 
-    return config_scene, config_agent, config_trail, config_chemo
+    return config_scene, config_food, config_agent, config_trail, config_chemo
 
 
 def check_interrupt():
@@ -83,9 +86,29 @@ def check_interrupt():
     return False
 
 
-def draw(scene, config_scene, screen, font, i):
+def visualise(scene, key, i=None):
+    """Visualise a single scene for inspection."""
+    key, subkey = jr.split(key, 2)  # NOTE use the same key as for run_headless
+    config_scene, _, _, _, _ = initialize_config(subkey)
+    height, width, upscale, _, _ = config_scene
+
+    pygame.init()
+
+    font = pygame.font.Font(None, 48)
+    screen = pygame.display.set_mode(upscale * jnp.array([width, height]))
+
+    draw(scene, config_scene, screen, font, i)
+
+    while True:
+        if check_interrupt():
+            break
+
+    pygame.quit()
+
+
+def draw(scene, config_scene, screen, font, i=None):
     """Draw the scene to the screen."""
-    height, width, upscale, _, _, config_display = config_scene
+    height, width, upscale, _, config_display = config_scene
 
     # draw the scene
     upscaled_shape = upscale * jnp.array([height, width])
@@ -93,16 +116,16 @@ def draw(scene, config_scene, screen, font, i):
     screen.blit(surface, (0, 0))
 
     # draw iteration counter
-    text = font.render(f'{i}', True, (88, 207, 57))
+    text = font.render(f'{i}' if i is not None else '', True, (88, 207, 57))
     screen.blit(text, (5, 5))
 
     pygame.display.update()
 
 
-def run_with_gui(key, num_iter=20000):
+def run_with_gui(config, key, num_iter=jnp.inf):
     """Run a simulation with gui, this is useful for debugging and getting images."""
-    config_scene, config_agent, config_trail, config_chemo = initialize_config()
-    height, width, upscale, _, _, _ = config_scene
+    config_scene, config_food, config_agent, config_trail, config_chemo = config
+    height, width, upscale, _, _ = config_scene
 
     pygame.init()
 
@@ -110,64 +133,70 @@ def run_with_gui(key, num_iter=20000):
     screen = pygame.display.set_mode(upscale * jnp.array([width, height]))
 
     key, subkey = jr.split(key, 2)
-    scene = scene_init(config_scene, config_chemo, subkey)
+    scene = scene_init(config_scene, config_food, config_chemo, subkey)
 
-    for i in range(num_iter):
+    i = 0
+    while i < num_iter:
         key, subkey = jr.split(key, 2)
         scene = scene_step(scene, config_trail, config_chemo, config_agent, subkey)
 
         draw(scene, config_scene, screen, font, i)
 
         if check_interrupt():
-            break
+            pygame.quit()
+            return
 
-    pygame.quit()
+        i += 1
+
+    while True:
+        if check_interrupt():
+            pygame.quit()
+            return
 
 
-@partial(jax.jit, static_argnames=['num_iter'])
-def run_headless(key, num_iter=20000):
+def run_headless(config, key, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
-    config_scene, config_agent, config_trail, config_chemo = initialize_config()
+    config_scene, config_food, config_agent, config_trail, config_chemo = config
 
-    key, subkey, *subkeys = jr.split(key, num_iter + 2)
-    scene = scene_init(config_scene, config_chemo, subkey)
+    key, subkey = jr.split(key, 2)
+    scene = scene_init(config_scene, config_food, config_chemo, subkey)
 
+    key, *subkeys = jr.split(key, num_iter + 1)
     _, scenes = jax.lax.scan(
-        lambda scene, k: (scene_step(scene, config_trail, config_chemo, config_agent, k), None),
+        lambda scene, k: (scene_step(scene, config_trail, config_chemo, config_agent, k), scene),
         scene,
         jnp.array(subkeys),
         length=num_iter,
     )
 
-    # height, width, upscale, _ = config_scene
-    # pygame.init()
-
-    # font = pygame.font.Font(None, 48)
-    # screen = pygame.display.set_mode(upscale * jnp.array([width, height]))
-
-    # draw(scenes[-1], config_scene, screen, font, -1)
-
-    # while True:
-    #     if check_interrupt():
-    #         break
-
-    # pygame.quit()
+    # the returned scenes list is of shape (len(scene), num_iter, height, width, ...)
+    # i.e. scenes[0][i] contains the agent_grid at iteration i
+    return scenes
 
 
 if __name__ == '__main__':
     # force run all computations on the cpu
     jax.config.update('jax_platform_name', 'cpu')
-
-    x = jnp.square(2)
-    print(repr(x.addressable_data(0).devices()))
+    # check on which device we are running
+    print(repr(jnp.square(2).addressable_data(0).devices()))
 
     key = jr.PRNGKey(37)
 
+    # generate a configuration to the experiment with
+    key, subkey = jr.split(key, 2)
+    config = initialize_config(subkey)
+
+    # run an experiment with gui
     t0 = time.time()
-    run_with_gui(key, num_iter=1000)
+    run_with_gui(config, key)
     print(time.time() - t0)
 
+    # # run an experiment headless
     # t0 = time.time()
-    # run_headless(key, num_iter=100)
+    # scenes = run_headless(config, key, num_iter=100)
     # print(time.time() - t0)
 
+    # # visualise one scene from the headless run
+    # n = -1
+    # scene = (scenes[0][n], scenes[1][n], scenes[2][n], scenes[3][n], scenes[4][n])
+    # visualise(scene, key)

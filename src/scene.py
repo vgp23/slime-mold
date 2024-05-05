@@ -7,9 +7,9 @@ import collections
 import numpy as np
 
 
-
-def scene_init(config_scene, config_chemo, key):
-    height, width, _, initial_population_density, foods, _ = config_scene
+def scene_init(config_scene, config_food, config_chemo, key):
+    height, width, _, initial_population_density, _ = config_scene
+    foods, food_amount, food_size = config_food
     chemo_deposit, _, _, _ = config_chemo
 
     # generate the positions at which we got agents using the specified density
@@ -27,20 +27,16 @@ def scene_init(config_scene, config_chemo, key):
 
     trail_grid = jnp.zeros((height, width))  # contains trail data
 
-    # Contains chemo-nutrient/food data. Food sources are initialized as 3x3
-    # arrays, the extra dimensions here allow food source placement at the very
-    # edges (though the 3x3 size will get clipped). Also need a binary mask of
-    # the initial chemo grid, to keep food source values constant across iterations.
-    chemo_grid = jnp.zeros((height + 2, width + 2))
-    # TODO fix this so it can be jit compiled
-    for food in foods:
-        chemo_grid = chemo_grid.at[
-            food[0]:food[0] + 3,
-            food[1]:food[1] + 3
-        ].set(chemo_deposit)
+    # Contains chemo-nutrient/food data. Also need a binary mask of the initial
+    # chemo grid, to keep food source values constant across iterations.
+    def food_step(chemo_grid, food):
+        total_deposit = jnp.full((food_size, food_size), chemo_deposit).astype(jnp.float32)
+        chemo_grid = jax.lax.dynamic_update_slice(chemo_grid, total_deposit, food)
+        return chemo_grid, None
 
-    chemo_grid = chemo_grid[1:-1, 1:-1]
-    food_grid = chemo_grid > 0
+    chemo_grid = jnp.zeros((height, width))
+    chemo_grid, _ = jax.lax.scan(food_step, chemo_grid, foods, length=len(foods))
+    food_grid = chemo_grid > 0  # food sources mask grid
 
     return agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
 
@@ -129,7 +125,6 @@ def rotate_agent(carry_in):
         elimination_trigger, height, width)
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def rotate_sense(agent, coordinate, scene, config_agent, config_trail, config_chemo, key):
     '''Rotates agent towards the sensor with the highest calculated value as per Wu et al.'''
     agent_grid, mask_grid, trail_grid, chemo_grid, _ = scene
@@ -158,7 +153,6 @@ def rotate_sense(agent, coordinate, scene, config_agent, config_trail, config_ch
     return agent
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def move_agent(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Moves an agent forward along its direction vector, by one grid position.'''
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
@@ -189,7 +183,6 @@ def move_agent(agent, coordinate, scene, config_agent, config_trail, config_chem
     return agent_grid, mask_grid, trail_grid, to_update
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def random_orientation(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Randomly selects new direction for the current agent.'''
     agent_grid, mask_grid, trail_grid, chemo_grid, _ = scene
@@ -202,7 +195,6 @@ def random_orientation(agent, coordinate, scene, config_agent, config_trail, con
     return agent_grid, mask_grid, trail_grid, to_update
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def attempt_move(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Attempts to move an agent one square in the direction of their direction vector.
     If the square is occupied, randomly choose a new direction vector and assign it to the agent.'''
@@ -217,7 +209,6 @@ def attempt_move(agent, coordinate, scene, config_agent, config_trail, config_ch
     return agent_grid, mask_grid, trail_grid, to_update
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def remove_agent(agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Clears the grid positions at a specific coordinate. Used to destroy agents in the field.'''
     agent_grid, mask_grid, trail_grid, _, _ = scene
@@ -242,7 +233,6 @@ def dont_reproduce(agent_grid, mask_grid, to_update, old_coordinate, key):
     return agent_grid, mask_grid, to_update
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def agent_present(coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Computes a position update for the given agent.'''
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
@@ -284,7 +274,6 @@ def agent_present(coordinate, scene, config_agent, config_trail, config_chemo, t
     return agent_grid, mask_grid, trail_grid, to_update
 
 
-@partial(jax.jit, static_argnames=['config_agent', 'config_trail', 'config_chemo'])
 def agent_absent(coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
     '''Does nothing, needed for jax.lax.cond in step.'''
     agent_grid, mask_grid, trail_grid, _, _ = scene
@@ -292,7 +281,7 @@ def agent_absent(coordinate, scene, config_agent, config_trail, config_chemo, to
 
 
 @jax.jit
-def _step(carry_in, coordinate):
+def step(carry_in, coordinate):
     '''Performs an update to a single grid coordinate position.'''
     scene, config_agent, config_trail, config_chemo, to_update, key = carry_in
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
@@ -315,7 +304,7 @@ def _step(carry_in, coordinate):
     return carry_out, None
 
 
-@partial(jax.jit, static_argnames=['config_trail', 'config_chemo', 'config_agent'])
+# TODO split so it can be jit compiled, perform kernel averaging on gpu?
 def scene_step(scene, config_trail, config_chemo, config_agent, key):
     """Perform one update step on the scene by updating each agent in a random order."""
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
@@ -332,7 +321,7 @@ def scene_step(scene, config_trail, config_chemo, config_agent, key):
     to_update = jnp.full_like(mask_grid, True)
 
     # step through all the coordinates and update the agents on those positions
-    (scene, _, _, _, _, _), _ = jax.lax.scan(_step,
+    (scene, _, _, _, _, _), _ = jax.lax.scan(step,
         (scene, config_agent, config_trail, config_chemo, to_update, key), coordinates)
 
     # convolve both the chemo and trail with an average filter after
@@ -357,7 +346,6 @@ def scene_step(scene, config_trail, config_chemo, config_agent, key):
     return scene
 
 
-# @partial(jax.jit, static_argnames=['upscaled_shape'])
 def scene_pixelmap(scene, upscaled_shape, config_display):
     """Create a pixelmap of the scene on the gpu that can be drawn directly."""
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
@@ -372,18 +360,18 @@ def scene_pixelmap(scene, upscaled_shape, config_display):
     # upscale trail and chemo maps
     trail_colormap = jax.image.resize(trail_grid, upscaled_shape, method='nearest')
     chemo_colormap = jax.image.resize(chemo_grid, upscaled_shape, method='nearest')
-    food_colormap = jax.image.resize(food_grid, upscaled_shape, method='nearest')
+    food_colormap  = jax.image.resize(food_grid, upscaled_shape, method='nearest')
 
     # To achieve the desired color,the target color channel is set to 255,
     # and the other two are *decreased* in proportion to the value in the
     # trail/chemo map. This makes low values close to white, and high
     # values a dark color.
-
     red_channel = jnp.full_like(agent_colormap, 255)
     green_channel = jnp.full_like(agent_colormap, 255)
     blue_channel = jnp.full_like(agent_colormap, 255)
 
     if display_chemo:
+        # TODO make chemo spreading visual when trails are also visibible
         # intensity transformation, strictly for visual purposes
         # clipping the map back to [0, 255]
         intensity = 30
@@ -425,7 +413,11 @@ def scene_pixelmap(scene, upscaled_shape, config_display):
         green_channel = jnp.multiply(green_channel, not_food_pixels) + jnp.multiply(jnp.zeros_like(green_channel), food_pixels)
         blue_channel = jnp.multiply(blue_channel, not_food_pixels) + jnp.multiply(jnp.zeros_like(blue_channel), food_pixels)
 
-    pixelmap = jnp.stack((red_channel.astype(jnp.uint8), green_channel.astype(jnp.uint8), blue_channel.astype(jnp.uint8)), axis=-1)
+    pixelmap = jnp.stack((
+        red_channel.astype(jnp.uint8),
+        green_channel.astype(jnp.uint8),
+        blue_channel.astype(jnp.uint8)
+    ), axis=-1)
 
     # transpose from shape (height, width, 3) to (width, height, 3) for pygame
     transposed_pixelmap = jnp.transpose(pixelmap, (1, 0, 2))
