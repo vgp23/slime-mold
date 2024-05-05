@@ -34,7 +34,7 @@ def initialize_config(key):
 
     height, width = 100, 100
     upscale = 10
-    initial_population_density = 0.5
+    initial_population_density = 0.1
 
     trail_deposit = 5
     trail_damping = 0.2 # DOUBLED, less spreading
@@ -106,7 +106,7 @@ def check_interrupt():
     return False
 
 
-def visualise(scene, key, i=None):
+def visualise(scenes, key, i=None):
     """Visualise a single scene for inspection."""
     key, subkey = jr.split(key, 2)  # NOTE use the same key as for run_headless
     config_scene, _, _, _, _ = initialize_config(subkey)
@@ -117,13 +117,33 @@ def visualise(scene, key, i=None):
     font = pygame.font.Font(None, 48)
     screen = pygame.display.set_mode(upscale * jnp.array([width, height]))
 
-    draw(scene, config_scene, screen, font, i)
+    if i is None:
+        i = len(scenes[0]) - 1
 
     while True:
-        if check_interrupt():
-            break
+        scene = (scenes[0][i], scenes[1][i], scenes[2][i], scenes[3][i], scenes[4][i])
+        draw(scene, config_scene, screen, font, i)
 
-    pygame.quit()
+        change_of_scene = False
+        while not change_of_scene:
+            # change the scene to one before or one after
+            for event in pygame.event.get():
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        return
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_q:
+                        pygame.quit()
+                        return
+
+                    if event.key == pygame.K_LEFT:
+                        i = max(i - 1, 0)
+                        change_of_scene = True
+                    if event.key == pygame.K_RIGHT:
+                        i = min(i + 1, len(scenes[0]) - 1)
+                        change_of_scene = True
 
 
 def draw(scene, config_scene, screen, font, i=None):
@@ -207,16 +227,14 @@ if __name__ == '__main__':
     config = initialize_config(subkey)
 
     # run an experiment with gui
-    t0 = time.time()
-    run_with_gui(config, key)
-    print(time.time() - t0)
-
-    # # run an experiment headless
     # t0 = time.time()
-    # scenes = run_headless(config, key, num_iter=100)
+    # run_with_gui(config, key)
     # print(time.time() - t0)
 
+    # # run an experiment headless
+    t0 = time.time()
+    scenes = run_headless(config, key, num_iter=100)
+    print(time.time() - t0)
+
     # # visualise one scene from the headless run
-    # n = -1
-    # scene = (scenes[0][n], scenes[1][n], scenes[2][n], scenes[3][n], scenes[4][n])
-    # visualise(scene, key)
+    visualise(scenes, key)
