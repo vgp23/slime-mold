@@ -42,31 +42,16 @@ def scene_init(config_scene, config_food, config_chemo, key):
     return agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
 
 
-@partial(jax.jit, static_argnames=['height', 'width'])
 def grid_coordinates(height, width):
     """Get all coordinates in a 2d grid."""
     X, Y = jnp.meshgrid(jnp.arange(width), jnp.arange(height))
     return jnp.vstack((Y.flatten(), X.flatten())).T
 
 
-@partial(jax.jit, static_argnames=['height', 'width'])
 def out_of_bounds(ls_coord, rs_coord, height, width):
     '''Returns whether the left or right sensor(s) are out of bounds of the field.'''
-
-    # Goes through all possible out-of-bounds cases individually,
-    # jax doesn't allow them to all be evaluated at once.
-    l_oob = jnp.select(
-        condlist=[ls_coord[0] < 0, ls_coord[0] >= height, ls_coord[1] < 0, ls_coord[1] >= width],
-        choicelist=[True,True,True,True],
-        default=False
-    )
-
-    r_oob = jnp.select(
-        condlist=[rs_coord[0] < 0, rs_coord[0] >= height, rs_coord[1] < 0, rs_coord[1] >= width],
-        choicelist=[True,True,True,True],
-        default=False
-    )
-
+    l_oob = ls_coord[0] < 0 or ls_coord[0] >= height or ls_coord[1] < 0 or ls_coord[1] >= width
+    r_oob = rs_coord[0] < 0 or rs_coord[0] >= height or rs_coord[1] < 0 or rs_coord[1] >= width
     return l_oob, r_oob
 
 
@@ -202,11 +187,15 @@ def attempt_move(agent, coordinate, scene, config_agent, config_trail, config_ch
     agent_grid, mask_grid, trail_grid, _, _ = scene
     new_pos = coordinate + agent[:2]
 
-    agent_grid, mask_grid, trail_grid, to_update = jax.lax.cond(
-        mask_grid[*new_pos] == False, move_agent, random_orientation,
-        agent, coordinate,
-        scene, config_agent, config_trail, config_chemo, to_update, key
-    )
+    if not mask_grid[*new_pos]:
+        agent_grid, mask_grid, trail_grid, to_update = move_agent(
+            agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key
+        )
+    else:
+        agent_grid, mask_grid, trail_grid, to_update = random_orientation(
+            agent, coordinate, scene, config_agent, config_trail, config_chemo, to_update, key
+        )
+
     return agent_grid, mask_grid, trail_grid, to_update
 
 
@@ -226,11 +215,6 @@ def reproduce(agent_grid, mask_grid, to_update, old_coordinate, key):
     mask_grid = mask_grid.at[*old_coordinate].set(True)
     # don't want to update the children in the current iteration
     to_update = to_update.at[*old_coordinate].set(False)
-    return agent_grid, mask_grid, to_update
-
-
-def dont_reproduce(agent_grid, mask_grid, to_update, old_coordinate, key):
-    '''Does nothing, needed for jax.lax.cond in reproduction step.'''
     return agent_grid, mask_grid, to_update
 
 
@@ -264,24 +248,13 @@ def agent_present(coordinate, scene, config_agent, config_trail, config_chemo, t
         config_agent, config_trail, config_chemo, to_update, subkey
     )
 
-    # if the reproduction trigger is met, generate new agent in
-    # the current agent's old position
-    agent_grid, mask_grid, to_update = jax.lax.cond(
-        agent[-1] > reproduction_trigger,
-        reproduce, dont_reproduce,
-        agent_grid, mask_grid, to_update, coordinate, key
-    )
+    # if the reproduction trigger is met, generate new agent in the current agent's old position
+    if agent[-1] > reproduction_trigger:
+        agent_grid, mask_grid, to_update = reproduce(agent_grid, mask_grid, to_update, coordinate, key)
 
     return agent_grid, mask_grid, trail_grid, to_update
 
 
-def agent_absent(coordinate, scene, config_agent, config_trail, config_chemo, to_update, key):
-    '''Does nothing, needed for jax.lax.cond in step.'''
-    agent_grid, mask_grid, trail_grid, _, _ = scene
-    return agent_grid, mask_grid, trail_grid, to_update
-
-
-@jax.jit
 def step(carry_in, coordinate):
     '''Performs an update to a single grid coordinate position.'''
     scene, config_agent, config_trail, config_chemo, to_update, key = carry_in
@@ -294,10 +267,10 @@ def step(carry_in, coordinate):
     key, subkey = jr.split(key, 2)
 
     # update agent position and trail grid
-    agent_grid, mask_grid, trail_grid, to_update = jax.lax.cond(
-        is_agent, agent_present, agent_absent,
-        coordinate, scene, config_agent, config_trail, config_chemo, to_update, subkey
-    )
+    if is_agent:
+        agent_grid, mask_grid, trail_grid, to_update = agent_present(
+            coordinate, scene, config_agent, config_trail, config_chemo, to_update, subkey
+        )
 
     # package arguments for next iteration
     scene = agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
