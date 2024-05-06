@@ -25,17 +25,17 @@ class TestAgent(unittest.TestCase):
     def test_sensor_positions_far(self):
         sensor_length = 5
         for agent_dir, *sensors in self.agent_sensors:
-            agent = jnp.array([*agent_dir, 0])
+            agent = np.array([*agent_dir, 0])
             left, right = agent_sensor_positions(agent, sensor_length)
 
-            sensors = sensor_length * jnp.array(sensors)
+            sensors = sensor_length * np.array(sensors)
 
             self.assertTrue(
-                jnp.array_equal(sensors[0], left),
+                np.array_equal(sensors[0], left),
                 f'{agent_dir}: {sensors[0]} != {left}'
             )
             self.assertTrue(
-                jnp.array_equal(sensors[1], right),
+                np.array_equal(sensors[1], right),
                 f'{agent_dir}: {sensors[1]} != {right}'
             )
 
@@ -43,14 +43,14 @@ class TestAgent(unittest.TestCase):
     def test_sensor_positions(self):
         sensor_length = 1
         for agent_dir, *sensors in self.agent_sensors:
-            agent = jnp.array([*agent_dir, 0])
+            agent = np.array([*agent_dir, 0])
             left, right = agent_sensor_positions(agent, sensor_length)
 
             self.assertTrue(
-                jnp.array_equal(sensors[0], left),
+                np.array_equal(sensors[0], left),
                 f'{agent_dir}: {sensors[0]} != {left}'
             )
             self.assertTrue(
-                jnp.array_equal(sensors[1], right),
+                np.array_equal(sensors[1], right),
                 f'{agent_dir}: {sensors[1]} != {right}'
             )
