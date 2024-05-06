@@ -50,8 +50,8 @@ def initialize_config():
     food_amount = 10
     food_size = 3
 
-    foods_y = np.random.choice(np.arange(height - food_size), shape=(food_amount,))
-    foods_x = np.random.choice(np.arange(width - food_size), shape=(food_amount,))
+    foods_y = np.random.choice(np.arange(height - food_size), size=(food_amount,))
+    foods_x = np.random.choice(np.arange(width - food_size), size=(food_amount,))
     foods = np.stack((foods_y, foods_x), axis=-1)
 
     # visualization settings
@@ -102,6 +102,21 @@ def check_interrupt():
     return False
 
 
+def draw(scene, config_scene, screen, font, i=None):
+    """Draw the scene to the screen."""
+    height, width, upscale, _, config_display = config_scene
+
+    # draw the scene
+    surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, upscale, config_display))
+    screen.blit(surface, (0, 0))
+
+    # draw iteration counter
+    text = font.render(f'{i}' if i is not None else '', True, (88, 207, 57))
+    screen.blit(text, (5, 5))
+
+    pygame.display.update()
+
+
 def visualise(scenes, i=None):
     """Visualise a single scene for inspection."""
     config_scene, _, _, _, _ = initialize_config()
@@ -140,22 +155,6 @@ def visualise(scenes, i=None):
                         change_of_scene = True
 
 
-def draw(scene, config_scene, screen, font, i=None):
-    """Draw the scene to the screen."""
-    height, width, upscale, _, config_display = config_scene
-
-    # draw the scene
-    upscaled_shape = upscale * np.array([height, width])
-    surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, upscaled_shape, config_display))
-    screen.blit(surface, (0, 0))
-
-    # draw iteration counter
-    text = font.render(f'{i}' if i is not None else '', True, (88, 207, 57))
-    screen.blit(text, (5, 5))
-
-    pygame.display.update()
-
-
 def run_with_gui(config, num_iter=np.inf):
     """Run a simulation with gui, this is useful for debugging and getting images."""
     config_scene, config_food, config_agent, config_trail, config_chemo = config
@@ -192,7 +191,7 @@ def run_headless(config, num_iter=20000):
     scene = scene_init(config_scene, config_food, config_chemo)
     scenes = [scene]
 
-    for _ in num_iter:
+    for _ in range(num_iter):
         scene = scene_step(scene, config_trail, config_chemo, config_agent)
 
     return scenes
@@ -203,14 +202,14 @@ if __name__ == '__main__':
     config = initialize_config()
 
     # run an experiment with gui
-    # t0 = time.time()
-    # run_with_gui(config)
-    # print(time.time() - t0)
-
-    # # run an experiment headless
     t0 = time.time()
-    scenes = run_headless(config, num_iter=1000)
+    run_with_gui(config)
     print(time.time() - t0)
 
+    # # run an experiment headless
+    # t0 = time.time()
+    # scenes = run_headless(config, num_iter=1000)
+    # print(time.time() - t0)
+
     # # visualise one scene from the headless run
-    visualise(scenes)
+    # visualise(scenes)
