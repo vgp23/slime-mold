@@ -29,6 +29,6 @@ def agent_sensor_directions(agent):
     return sensor_map[*(agent[:2] + 1)]
 
 
-def agent_sensor_positions(agent, sensor_length):
+def agent_sensor_positions(agent, c):
     """Compute the relative positions of the sensors using a sensor map."""
-    return sensor_length * agent_sensor_directions(agent)
+    return c.sensor_length * agent_sensor_directions(agent)

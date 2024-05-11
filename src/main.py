@@ -7,68 +7,43 @@ import pygame
 import time
 
 
-def initialize_config():
-    # define all the hyperparameters for the simulation
+class Config:
 
-    # original parameters
-    # height, width = 200, 200
-    # upscale = 4
-    # initial_population_density = 0.5
+    def __init__(self):
+        # TODO process kwargs to override default values
 
-    # trail_deposit = 5
-    # trail_damping = 0.1
-    # trail_filter_size = 3
-    # trail_weight = 0.4
+        self.height = 100
+        self.width = 100
+        self.upscale = 10
+        self.initial_population_density = 0.1
 
-    # chemo_deposit = 10
-    # chemo_damping = 0.2
-    # chemo_filter_size = 5
-    # chemo_weight = 1 - trail_weight
+        self.trail_deposit = 5
+        self.trail_damping = 0.1
+        self.trail_filter_size = 3
+        self.trail_weight = 0.4
 
-    # sensor_length = 7
-    # reproduction_trigger = 15
-    # elimination_trigger = -10
+        self.chemo_deposit = 10
+        self.chemo_damping = 0.2
+        self.chemo_filter_size = 5
+        self.chemo_weight = 1 - self.trail_weight
 
-    height, width = 100, 100
-    upscale = 10
-    initial_population_density = 0.1
+        self.sensor_length = 4 # DECREASED
+        self.reproduction_trigger = 15
+        self.elimination_trigger = -10
 
-    trail_deposit = 5
-    trail_damping = 0.2 # DOUBLED, less spreading
-    trail_filter_size = 3
-    trail_weight = 0.4
+        self.food_deposit = 10
+        self.food_amount = 10
+        self.food_size = 3
 
-    chemo_deposit = 10
-    chemo_damping = 0.2
-    chemo_filter_size = 5
-    chemo_weight = 1 - trail_weight
+        foods_y = np.random.choice(np.arange(self.height - self.food_size), size=(self.food_amount,))
+        foods_x = np.random.choice(np.arange(self.width - self.food_size), size=(self.food_amount,))
+        self.foods = np.stack((foods_y, foods_x), axis=-1)
 
-    sensor_length = 4 # DECREASED
-    reproduction_trigger = 15
-    elimination_trigger = -10
-
-    food_amount = 10
-    food_size = 3
-
-    foods_y = np.random.choice(np.arange(height - food_size), size=(food_amount,))
-    foods_x = np.random.choice(np.arange(width - food_size), size=(food_amount,))
-    foods = np.stack((foods_y, foods_x), axis=-1)
-
-    # visualization settings
-    display_chemo = True
-    display_trail = True
-    display_agents = True
-    display_food = True
-
-    # pack the config info into smaller variables for convenience
-    config_agent = (sensor_length, reproduction_trigger, elimination_trigger)
-    config_trail = (trail_deposit, trail_damping, trail_filter_size, trail_weight)
-    config_chemo = (chemo_deposit, chemo_damping, chemo_filter_size, chemo_weight)
-    config_display = (display_chemo, display_trail, display_agents, display_food)
-    config_food = (foods, food_amount, food_size)
-    config_scene = (height, width, upscale, initial_population_density, config_display)
-
-    return config_scene, config_food, config_agent, config_trail, config_chemo
+        # visualization settings
+        self.display_chemo = True
+        self.display_trail = True
+        self.display_agents = True
+        self.display_food = True
 
 
 def wait_for_spacebar():
@@ -102,12 +77,10 @@ def check_interrupt():
     return False
 
 
-def draw(scene, config_scene, screen, font, i=None):
+def draw(scene, c, screen, font, i=None):
     """Draw the scene to the screen."""
-    height, width, upscale, _, config_display = config_scene
-
     # draw the scene
-    surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, upscale, config_display))
+    surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, c))
     screen.blit(surface, (0, 0))
 
     # draw iteration counter
@@ -119,19 +92,18 @@ def draw(scene, config_scene, screen, font, i=None):
 
 def visualise(scenes, i=None):
     """Visualise a single scene for inspection."""
-    config_scene, _, _, _, _ = initialize_config()
-    height, width, upscale, _, _ = config_scene
+    c = Config()
 
     pygame.init()
 
     font = pygame.font.Font(None, 48)
-    screen = pygame.display.set_mode(upscale * np.array([width, height]))
+    screen = pygame.display.set_mode(c.upscale * np.array([c.width, c.height]))
 
     if i is None:
         i = len(scenes[0]) - 1
 
     while True:
-        draw(scenes[i], config_scene, screen, font, i)
+        draw(scenes[i], c, screen, font, i)
 
         change_of_scene = False
         while not change_of_scene:
@@ -155,22 +127,19 @@ def visualise(scenes, i=None):
                         change_of_scene = True
 
 
-def run_with_gui(config, num_iter=np.inf):
+def run_with_gui(c, num_iter=np.inf):
     """Run a simulation with gui, this is useful for debugging and getting images."""
-    config_scene, config_food, config_agent, config_trail, config_chemo = config
-    height, width, upscale, _, _ = config_scene
-
     pygame.init()
 
     font = pygame.font.Font(None, 48)
-    screen = pygame.display.set_mode(upscale * np.array([width, height]))
+    screen = pygame.display.set_mode(c.upscale * np.array([c.width, c.height]))
 
-    scene = scene_init(config_scene, config_food, config_chemo)
+    scene = scene_init(c)
 
     i = 0
     while i < num_iter:
-        scene = scene_step(scene, config_trail, config_chemo, config_agent)
-        draw(scene, config_scene, screen, font, i)
+        scene = scene_step(scene, c)
+        draw(scene, c, screen, font, i)
 
         if check_interrupt():
             pygame.quit()
@@ -184,29 +153,27 @@ def run_with_gui(config, num_iter=np.inf):
             return
 
 
-def run_headless(config, num_iter=20000):
+def run_headless(c, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
-    config_scene, config_food, config_agent, config_trail, config_chemo = config
-
-    scene = scene_init(config_scene, config_food, config_chemo)
+    scene = scene_init(c)
     scenes = [scene]
 
     for _ in range(num_iter):
-        scene = scene_step(scene, config_trail, config_chemo, config_agent)
+        scene = scene_step(scene, c)
 
     return scenes
 
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    config = initialize_config()
+    c = Config()
 
     # run an experiment with gui
     t0 = time.time()
-    run_with_gui(config)
+    run_with_gui(c)
     print(time.time() - t0)
 
-    # # run an experiment headless
+    # run an experiment headless
     # t0 = time.time()
     # scenes = run_headless(config, num_iter=1000)
     # print(time.time() - t0)
