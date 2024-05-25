@@ -4,7 +4,7 @@ import scipy
 import copy
 import time
 from vector import Vector2D
-from main import Config
+import pygame
 
 class Scene:
 
@@ -39,15 +39,22 @@ class Scene:
         # moving multiple times.
         self.to_update = np.full_like(self.mask_grid, True)
 
-        self.wall_grid = np.full_like(self.mask_grid, False)
-
-        # modifications to check if it works
-        self.wall_grid[5,5] = True
+        # generate the walls in the grid
+        self.wall_mask = np.full_like(self.mask_grid, False)
+        for y in range(c.wall_num_height):
+            for x in range(c.wall_num_width):
+                y_start = c.wall_height + y * 2 * c.wall_height
+                x_start = c.wall_width + x * 2 * c.wall_width
+                self.wall_mask[
+                    y_start:y_start + c.wall_height,
+                    x_start:x_start + c.wall_width
+                ] = True
 
 
     def out_of_bounds(self, pos):
         return pos.x < 0 or pos.y < 0 or \
-               pos.y >= self.c.height or pos.x >= self.c.width
+               pos.y >= self.c.height or pos.x >= self.c.width or \
+               self.wall_mask[pos.y, pos.x]
 
 
     def rotate_sense(self, agent, coordinate):
@@ -187,6 +194,8 @@ class Scene:
         self.chemo_grid = scipy.signal.convolve2d(self.chemo_grid, chemo_kernel, mode='same')
         self.chemo_grid = self.chemo_grid * (1 - self.c.chemo_damping)
 
+        self.chemo_grid = self.chemo_grid * (~self.wall_mask)  # clip out diffusion into walls
+
         # reset the values in the food sources to the default
         not_food_grid = self.food_grid == 0
         self.chemo_grid = np.multiply(not_food_grid, self.chemo_grid) + \
@@ -200,10 +209,14 @@ class Scene:
         self.trail_grid = scipy.signal.convolve2d(self.trail_grid, trail_kernel, mode='same')
         self.trail_grid = self.trail_grid * (1 - self.c.trail_damping)
 
+        self.trail_grid = self.trail_grid * (~self.wall_mask)  # clip out diffusion into walls
+
 
     def pixelmap(self):
         """Create a pixelmap of the scene on the gpu that can be drawn directly."""
-        # create a black and white colormap based on where there are agents
+        # create a black and white colormap based on
+        # creating a colormap for the walls
+        wall_colormap = ((1- self.wall_mask) * 255)
         agent_colormap = ((1 - self.mask_grid) * 255)
 
         # create colormap for trails and food source, blue and red respectively
@@ -273,7 +286,3 @@ class Scene:
         scaled_pixelmap = transposed_pixelmap.repeat(self.c.upscale, axis=0).repeat(self.c.upscale, axis=1)
 
         return scaled_pixelmap
-
-if __name__ == '__main__':
-    c = Config()
-    scene = Scene(c)

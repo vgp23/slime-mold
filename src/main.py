@@ -13,14 +13,14 @@ os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 class Config:
 
     def __init__(self, **kwargs):
-        self.height = 100
-        self.width = 100
+        self.wall_num_height = 6
+        self.wall_num_width = 6
 
-        self.wall_size_height =
-        self.wall_size_width =
+        self.wall_height = 10
+        self.wall_width = 10
 
-        self.wall_num_height =
-        self.wall_num_width =
+        self.height = self.wall_height * (2 * self.wall_num_height + 1)
+        self.width = self.wall_width * (2 * self.wall_num_width + 1)
 
         self.upscale = 10
         self.initial_population_density = 0.5
@@ -50,7 +50,7 @@ class Config:
 
         # visualization settings
         self.display_chemo = True
-        self.display_trail = False
+        self.display_trail = True
         self.display_agents = True
         self.display_food = True
 
