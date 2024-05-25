@@ -3,9 +3,9 @@ from functools import partial
 import collections
 import numpy as np
 import scipy
+import copy
 
 
-# TODO make food_size static arg so it can be jit compiled
 def scene_init(c):
     # generate the positions at which we got agents using the specified density
     mask_grid = np.random.uniform(size=(c.height, c.width)) < c.initial_population_density
@@ -47,14 +47,12 @@ def rotate_sense(agent, coordinate, scene, c):
     ls_coord = coordinate + left_sensor
     rs_coord = coordinate + right_sensor
 
-    height, width = mask_grid.shape
-
     # compute values of sensors
-    l_sv = 0
+    l_sv = -np.inf
     if not out_of_bounds(ls_coord, c):
         l_sv = c.chemo_weight * chemo_grid[*ls_coord] + c.trail_weight * trail_grid[*ls_coord]
 
-    r_sv = 0
+    r_sv = -np.inf
     if not out_of_bounds(rs_coord, c):
         r_sv = c.chemo_weight * chemo_grid[*rs_coord] + c.trail_weight * trail_grid[*rs_coord]
 
@@ -76,24 +74,24 @@ def move_agent(agent, coordinate, scene, c, to_update):
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
 
     new_pos = coordinate + agent[:2]
-    agent[-1] = agent[-1] + 1
+    agent[-1] += 1
 
     # rotate agent towards sensor with highest value
     scene = agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
     agent = rotate_sense(agent, new_pos, scene, c)
 
-    # remove the agent from the old position
-    agent_grid[*coordinate] = np.zeros(3)
-    mask_grid[*coordinate] = False
-
-    agent_grid[*new_pos] = agent
+    agent_grid[*new_pos] = copy.deepcopy(agent)
     mask_grid[*new_pos] = True
     # flag this position, so that the agent cannot be moved more than once
     # (happens when agent is moved to a position not yet iterated over)
     to_update[*new_pos] = False
 
-    # deposit trail at new position
-    trail_grid[*new_pos] = trail_grid[*new_pos] + c.trail_deposit
+    # remove the agent from the old position
+    agent_grid[*coordinate] = np.zeros(3)
+    mask_grid[*coordinate] = False
+
+    # deposit trail at the new position
+    trail_grid[*new_pos] += c.trail_deposit
 
 
 def random_orientation(agent, coordinate, scene):
@@ -126,14 +124,6 @@ def agent_present(coordinate, scene, c, to_update):
     left_sensor, right_sensor = agent_sensor_positions(agent, c)
     ls_coord = coordinate + left_sensor
     rs_coord = coordinate + right_sensor
-    height, width = mask_grid.shape
-
-    # rotate the agent until its sensors are not out of bounds
-    random_orientation(agent, coordinate, scene)
-
-    # change agent to its rotated form, and repackage the scene
-    agent_grid[*coordinate] = agent
-    scene = agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
 
     # If the elimination trigger is met, remove agent. Otherwise, attempt to move forward.
     if agent[-1] < c.elimination_trigger:
@@ -143,29 +133,14 @@ def agent_present(coordinate, scene, c, to_update):
         new_pos = coordinate + agent[:2]
         if not out_of_bounds(new_pos, c) and not mask_grid[*new_pos]:
             move_agent(agent, coordinate, scene, c, to_update)
+
+            # if the reproduction trigger is met, generate new agent in the current agent's old position
+            if agent_grid[*new_pos][-1] > c.reproduction_trigger:
+                reproduce(agent_grid, mask_grid, to_update, coordinate)
         else:
             random_orientation(agent, coordinate, scene)
 
-    # if the reproduction trigger is met, generate new agent in the current agent's old position
-    if agent[-1] > c.reproduction_trigger:
-        reproduce(agent_grid, mask_grid, to_update, coordinate)
 
-
-def step(scene, c, to_update, coordinate):
-    '''Performs an update to a single grid coordinate position.'''
-    agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
-
-    # if grid has an agent there and to_update is False in this position,
-    # the agent was placed at that position during an update of a previous
-    # coordinate and should be ignored.
-    is_agent = mask_grid[*coordinate] & to_update[*coordinate]
-
-    # update agent position and trail grid
-    if is_agent:
-        agent_present(coordinate, scene, c, to_update)
-
-
-# TODO split so it can be jit compiled, perform kernel averaging on gpu?
 def scene_step(scene, c):
     """Perform one update step on the scene by updating each agent in a random order."""
     agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
@@ -181,7 +156,14 @@ def scene_step(scene, c):
 
     # step through all the coordinates and update the agents on those positions
     for coordinate in coordinates:
-        step(scene, c, to_update, coordinate)
+        # if grid has an agent there and to_update is False in this position,
+        # the agent was placed at that position during an update of a previous
+        # coordinate and should be ignored.
+        is_agent = mask_grid[*coordinate] & to_update[*coordinate]
+
+        # update agent position and trail grid
+        if is_agent:
+            agent_present(coordinate, scene, c, to_update)
 
     # convolve both the chemo and trail with an average filter after
     # all agents have been updated + rotated.
@@ -269,15 +251,13 @@ def scene_pixelmap(scene, c):
         green_channel = green_channel * not_food_pixels + np.zeros_like(green_channel) * food_pixels
         blue_channel = blue_channel * not_food_pixels + np.zeros_like(blue_channel) * food_pixels
 
-    pixelmap = np.stack((
-        red_channel.astype(np.uint8),
-        green_channel.astype(np.uint8),
-        blue_channel.astype(np.uint8)
-    ), axis=-1)
+    pixelmap = np.stack(
+        (red_channel.astype(np.uint8), green_channel.astype(np.uint8), blue_channel.astype(np.uint8)),
+        axis=-1
+    )
 
     # transpose from shape (height, width, 3) to (width, height, 3) for pygame
     transposed_pixelmap = np.transpose(pixelmap, (1, 0, 2))
     scaled_pixelmap = transposed_pixelmap.repeat(c.upscale, axis=0).repeat(c.upscale, axis=1)
 
-    # move the data from the gpu to the cpu so pygame can draw it
     return scaled_pixelmap

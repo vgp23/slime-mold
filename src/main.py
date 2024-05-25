@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import collections
 import pygame
 import time
+import copy
 
 
 class Config:
@@ -15,12 +16,12 @@ class Config:
         self.height = 100
         self.width = 100
         self.upscale = 10
-        self.initial_population_density = 0.1
+        self.initial_population_density = 0.5
 
         self.trail_deposit = 5
         self.trail_damping = 0.1
         self.trail_filter_size = 3
-        self.trail_weight = 0.4
+        self.trail_weight = 0.1
 
         self.chemo_deposit = 10
         self.chemo_damping = 0.2
@@ -77,6 +78,26 @@ def check_interrupt():
     return False
 
 
+def scene_update(i, limit):
+    while True:
+        # change the scene to one before or one after
+        for event in pygame.event.get():
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    pygame.quit()
+                    return None
+
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_q:
+                    pygame.quit()
+                    return None
+
+                if event.key == pygame.K_LEFT:
+                    return max(i - 1, 0)
+                if event.key == pygame.K_RIGHT:
+                    return min(i + 1, limit)
+
+
 def draw(scene, c, screen, font, i=None):
     """Draw the scene to the screen."""
     # draw the scene
@@ -90,41 +111,23 @@ def draw(scene, c, screen, font, i=None):
     pygame.display.update()
 
 
-def visualise(scenes, i=None):
+def visualise(scenes, c, i=None):
     """Visualise a single scene for inspection."""
-    c = Config()
-
     pygame.init()
 
     font = pygame.font.Font(None, 48)
     screen = pygame.display.set_mode(c.upscale * np.array([c.width, c.height]))
+    limit = len(scenes) - 1
 
     if i is None:
-        i = len(scenes[0]) - 1
+        i = limit
 
     while True:
         draw(scenes[i], c, screen, font, i)
+        i = scene_update(i, limit)
 
-        change_of_scene = False
-        while not change_of_scene:
-            # change the scene to one before or one after
-            for event in pygame.event.get():
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        pygame.quit()
-                        return
-
-                if event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_q:
-                        pygame.quit()
-                        return
-
-                    if event.key == pygame.K_LEFT:
-                        i = max(i - 1, 0)
-                        change_of_scene = True
-                    if event.key == pygame.K_RIGHT:
-                        i = min(i + 1, len(scenes[0]) - 1)
-                        change_of_scene = True
+        if i is None:
+            return
 
 
 def run_with_gui(c, num_iter=np.inf):
@@ -159,7 +162,7 @@ def run_headless(c, num_iter=20000):
     scenes = [scene]
 
     for _ in range(num_iter):
-        scene = scene_step(scene, c)
+        scenes.append(copy.deepcopy(scene_step(scenes[-1], c)))
 
     return scenes
 
@@ -175,8 +178,6 @@ if __name__ == '__main__':
 
     # run an experiment headless
     # t0 = time.time()
-    # scenes = run_headless(config, num_iter=1000)
+    # scenes = run_headless(c, num_iter=100)
     # print(time.time() - t0)
-
-    # # visualise one scene from the headless run
-    # visualise(scenes)
+    # visualise(scenes, c)
