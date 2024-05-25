@@ -1,263 +1,250 @@
 from agent import *
-from functools import partial
-import collections
 import numpy as np
 import scipy
 import copy
+import time
+from vector import Vector2D
+
+class Scene:
+
+    def __init__(self, c):
+        self.c = c  # save the config
+
+        # generate the positions at which we got agents using the specified density
+        self.mask_grid = np.random.uniform(
+            size=(c.height, c.width)) < c.initial_population_density
+
+        # generate agent data at the positions in mask_grid
+        self.agent_grid = np.full(self.mask_grid.shape, None, dtype=object)
+        for y in range(len(self.mask_grid)):
+            for x in range(len(self.mask_grid[y])):
+                if self.mask_grid[y, x]:
+                    self.agent_grid[y, x] = Agent()
+
+        self.trail_grid = np.zeros((c.height, c.width))  # contains trail data
+
+        # Contains chemo-nutrient/food data. Also need a binary mask of the initial
+        # chemo grid, to keep food source values constant across iterations.
+        self.chemo_grid = np.zeros((c.height, c.width))
+        for food in c.foods:
+            self.chemo_grid[
+                food[0]:food[0] + c.food_size, food[1]:food[1] + c.food_size
+            ] = c.food_deposit
+
+        self.food_grid = self.chemo_grid > 0  # food sources mask grid
+
+        # boolean grid, used to account for possibility that agent is moved to a
+        # grid position that has not yet been iterated over, leading to an agent
+        # moving multiple times.
+        self.to_update = np.full_like(self.mask_grid, True)
 
 
-def scene_init(c):
-    # generate the positions at which we got agents using the specified density
-    mask_grid = np.random.uniform(size=(c.height, c.width)) < c.initial_population_density
-
-    # generate agent data at the positions in mask_grid
-    agent_grid = np.full((*mask_grid.shape, 3), 73, dtype=int)
-    for y in range(len(mask_grid)):
-        for x in range(len(mask_grid[y])):
-            if mask_grid[y, x]:
-                agent_grid[y, x] = agent_init()
-
-    trail_grid = np.zeros((c.height, c.width))  # contains trail data
-
-    # Contains chemo-nutrient/food data. Also need a binary mask of the initial
-    # chemo grid, to keep food source values constant across iterations.
-    chemo_grid = np.zeros((c.height, c.width))
-    for food in c.foods:
-        chemo_grid[food[0]:food[0] + c.food_size, food[1]:food[1] + c.food_size] = c.food_deposit
-    food_grid = chemo_grid > 0  # food sources mask grid
-
-    return agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
+    def out_of_bounds(self, pos):
+        return pos.x < 0 or pos.y < 0 or \
+               pos.y >= self.c.height or pos.x >= self.c.width
 
 
-def grid_coordinates(c):
-    """Get all coordinates in a 2d grid."""
-    X, Y = np.meshgrid(np.arange(c.width), np.arange(c.height))
-    return np.vstack((Y.flatten(), X.flatten())).T
+    def rotate_sense(self, agent, coordinate):
+        '''Rotates agent towards the sensor with the highest calculated value
+           as per Wu et al.'''
+        # lsensor, msensor, rsensor = agent.sensor_positions(agent, self.c)
+        lsensor, rsensor = agent.sensor_positions(self.c)
+        lcoord = coordinate + lsensor
+        # mcoord = coordinate + msensor
+        rcoord = coordinate + rsensor
+
+        def sensor_value(coord):
+            value = -np.inf
+            if not self.out_of_bounds(coord):
+                value = self.c.chemo_weight * self.chemo_grid[coord.y, coord.x] + \
+                        self.c.trail_weight * self.trail_grid[coord.y, coord.x]
+            return value
+
+        # compute values of sensors
+        lvalue = sensor_value(lcoord)
+        # mvalue = sensor_value(mcoord)
+        rvalue = sensor_value(rcoord)
+
+        # update direction based on which is larger
+        if lvalue > rvalue:
+            agent.rotate_left()
+        if lvalue < rvalue:
+            agent.rotate_right()
 
 
-def out_of_bounds(pos, c):
-    return pos[0] < 0 or pos[1] < 0 or pos[0] >= c.height or pos[1] >= c.width
+    def move_agent(self, agent, coordinate):
+        '''Moves an agent forward along its direction vector, by one grid position.'''
+        new_pos = coordinate + agent.direction()
+        agent.counter += 1
+
+        # rotate agent towards sensor with highest value
+        self.rotate_sense(agent, new_pos)
+
+        self.agent_grid[new_pos.y, new_pos.x] = copy.deepcopy(agent)
+        self.mask_grid[new_pos.y, new_pos.x] = True
+        # flag this position, so that the agent cannot be moved more than once
+        # (happens when agent is moved to a position not yet iterated over)
+        self.to_update[new_pos.y, new_pos.x] = False
+
+        # remove the agent from the old position
+        self.agent_grid[coordinate.y, coordinate.x] = None
+        self.mask_grid[coordinate.y, coordinate.x] = False
+
+        # deposit trail at the new position
+        self.trail_grid[new_pos.y, new_pos.x] += self.c.trail_deposit
 
 
-def rotate_sense(agent, coordinate, scene, c):
-    '''Rotates agent towards the sensor with the highest calculated value as per Wu et al.'''
-    agent_grid, mask_grid, trail_grid, chemo_grid, _ = scene
-
-    left_sensor, right_sensor = agent_sensor_positions(agent, c)
-    ls_coord = coordinate + left_sensor
-    rs_coord = coordinate + right_sensor
-
-    # compute values of sensors
-    l_sv = -np.inf
-    if not out_of_bounds(ls_coord, c):
-        l_sv = c.chemo_weight * chemo_grid[*ls_coord] + c.trail_weight * trail_grid[*ls_coord]
-
-    r_sv = -np.inf
-    if not out_of_bounds(rs_coord, c):
-        r_sv = c.chemo_weight * chemo_grid[*rs_coord] + c.trail_weight * trail_grid[*rs_coord]
-
-    # update direction based on which is larger
-    direction_idx = np.random.choice(2)
-    if l_sv > r_sv:
-        direction_idx = 0
-    if l_sv < r_sv:
-        direction_idx = 1
-
-    new_directions = agent_sensor_directions(agent)
-    agent[:2] = new_directions[direction_idx]
-
-    return agent
+    def reproduce(self, coordinate):
+        '''Randomly initializes a new agent in the position of its parent agent, if
+        the parent has exceeded the reproduction trigger threshold.'''
+        self.agent_grid[coordinate.y, coordinate.x] = Agent()
+        self.mask_grid[coordinate.y, coordinate.x] = True
+        self.to_update[coordinate.y, coordinate.x] = False
 
 
-def move_agent(agent, coordinate, scene, c, to_update):
-    '''Moves an agent forward along its direction vector, by one grid position.'''
-    agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
+    def agent_present(self, coordinate):
+        '''Computes a position update for the given agent.'''
+        agent = self.agent_grid[coordinate.y, coordinate.x]
 
-    new_pos = coordinate + agent[:2]
-    agent[-1] += 1
-
-    # rotate agent towards sensor with highest value
-    scene = agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
-    agent = rotate_sense(agent, new_pos, scene, c)
-
-    agent_grid[*new_pos] = copy.deepcopy(agent)
-    mask_grid[*new_pos] = True
-    # flag this position, so that the agent cannot be moved more than once
-    # (happens when agent is moved to a position not yet iterated over)
-    to_update[*new_pos] = False
-
-    # remove the agent from the old position
-    agent_grid[*coordinate] = np.zeros(3)
-    mask_grid[*coordinate] = False
-
-    # deposit trail at the new position
-    trail_grid[*new_pos] += c.trail_deposit
-
-
-def random_orientation(agent, coordinate, scene):
-    '''Randomly selects new direction for the current agent.'''
-    agent_grid, mask_grid, trail_grid, chemo_grid, _ = scene
-
-    temp_agent = agent_init()
-    agent[:2] = temp_agent[:2]
-    agent[-1] = agent[-1] - 1
-
-    agent_grid[*coordinate] = agent
-
-
-def reproduce(agent_grid, mask_grid, to_update, old_coordinate):
-    '''Randomly initializes a new agent in the position of its parent agent, if
-    the parent has exceeded the reproduction trigger threshold '''
-    new_agent = agent_init()
-    agent_grid[*old_coordinate] = new_agent
-    mask_grid[*old_coordinate] = True
-    # don't want to update the children in the current iteration
-    to_update[*old_coordinate] = False
-
-
-def agent_present(coordinate, scene, c, to_update):
-    '''Computes a position update for the given agent.'''
-    agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
-
-    agent = agent_grid[*coordinate]
-
-    left_sensor, right_sensor = agent_sensor_positions(agent, c)
-    ls_coord = coordinate + left_sensor
-    rs_coord = coordinate + right_sensor
-
-    # If the elimination trigger is met, remove agent. Otherwise, attempt to move forward.
-    if agent[-1] < c.elimination_trigger:
-        agent_grid[*coordinate] = np.zeros(3)
-        mask_grid[*coordinate] = False
-    else:
-        new_pos = coordinate + agent[:2]
-        if not out_of_bounds(new_pos, c) and not mask_grid[*new_pos]:
-            move_agent(agent, coordinate, scene, c, to_update)
-
-            # if the reproduction trigger is met, generate new agent in the current agent's old position
-            if agent_grid[*new_pos][-1] > c.reproduction_trigger:
-                reproduce(agent_grid, mask_grid, to_update, coordinate)
+        # If the elimination trigger is met, remove agent.
+        # Otherwise, attempt to move forward.
+        if agent.counter < self.c.elimination_trigger:
+            self.agent_grid[coordinate.y, coordinate.x] = None
+            self.mask_grid[coordinate.y, coordinate.x] = False
         else:
-            random_orientation(agent, coordinate, scene)
+            new_pos = coordinate + agent.direction()
+            if (
+                not self.out_of_bounds(new_pos) and \
+                not self.mask_grid[new_pos.y, new_pos.x]
+            ):
+                self.move_agent(agent, coordinate)
+
+                # if the reproduction trigger is met, generate new agent in the current agent's old position
+                if self.agent_grid[new_pos.y, new_pos.x].counter > self.c.reproduction_trigger:
+                    self.reproduce(coordinate)
+            else:
+                agent.random_direction()
+                agent.counter -= 1
 
 
-def scene_step(scene, c):
-    """Perform one update step on the scene by updating each agent in a random order."""
-    agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
+    def step(self):
+        """Perform one update step on the scene by updating each agent in a random order."""
+        # generate a shuffled list of coordinates which determines the agent update order.
+        # coordinates are only updated if an agent is on them.
+        X, Y = np.meshgrid(np.arange(self.c.width), np.arange(self.c.height))
+        grid_coordinates = np.vstack((Y.flatten(), X.flatten())).T
+        coordinates = np.random.permutation(grid_coordinates)  # [(y, x)]
 
-    # generate a shuffled list of coordinates which determines the agent update order.
-    # coordinates are only updated if an agent is on them.
-    coordinates = np.random.permutation(grid_coordinates(c))
+        self.to_update = np.full_like(self.mask_grid, True)
 
-    # boolean grid, used to account for possibility that agent is moved to a
-    # grid position that has not yet been iterated over, leading to an agent
-    # moving multiple times.
-    to_update = np.full_like(mask_grid, True)
+        # step through all the coordinates and update the agents on those positions
+        for coordinate in coordinates:
+            coordinate = Vector2D(*coordinate)
+            # update agent position and trail grid
+            if (
+                self.mask_grid[coordinate.y, coordinate.x] and \
+                self.to_update[coordinate.y, coordinate.x]
+            ):
+                self.agent_present(coordinate)
 
-    # step through all the coordinates and update the agents on those positions
-    for coordinate in coordinates:
-        # if grid has an agent there and to_update is False in this position,
-        # the agent was placed at that position during an update of a previous
-        # coordinate and should be ignored.
-        is_agent = mask_grid[*coordinate] & to_update[*coordinate]
-
-        # update agent position and trail grid
-        if is_agent:
-            agent_present(coordinate, scene, c, to_update)
-
-    # convolve both the chemo and trail with an average filter after
-    # all agents have been updated + rotated.
-    agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
-
-    # chemo grid
-    chemo_kernel = np.ones((c.chemo_filter_size, c.chemo_filter_size)) * (1 / c.chemo_filter_size**2)
-    chemo_grid = scipy.signal.convolve2d(chemo_grid, chemo_kernel, mode='same')
-    chemo_grid = chemo_grid * (1 - c.chemo_damping)
-
-    # reset the values in the food sources to the default
-    not_food_grid = food_grid == 0
-    chemo_grid = np.multiply(not_food_grid, chemo_grid) + food_grid * c.chemo_deposit
-
-    # trail grid
-    trail_kernel = np.ones((c.trail_filter_size, c.trail_filter_size)) * (1 / c.trail_filter_size**2)
-    trail_grid = scipy.signal.convolve2d(trail_grid, trail_kernel, mode='same')
-    trail_grid = trail_grid * (1 - c.trail_damping)
-
-    scene = agent_grid, mask_grid, trail_grid, chemo_grid, food_grid
-    return scene
+        self.diffuse()
 
 
-def scene_pixelmap(scene, c):
-    """Create a pixelmap of the scene on the gpu that can be drawn directly."""
-    agent_grid, mask_grid, trail_grid, chemo_grid, food_grid = scene
+    def diffuse(self):
+        """Convolve both the chemo and trail with an average filter after all
+        agents have been updated + rotated."""
 
-    # create a black and white colormap based on where there are agents
-    agent_colormap = ((1 - mask_grid) * 255)
+        # chemo grid
+        chemo_kernel = np.ones(
+            (self.c.chemo_filter_size, self.c.chemo_filter_size)
+        ) * (1 / self.c.chemo_filter_size**2)
 
-    # create colormap for trails and food source, blue and red respectively
-    # upscale trail and chemo maps
-    trail_colormap = np.copy(trail_grid)
-    chemo_colormap = np.copy(chemo_grid)
-    food_colormap  = np.copy(food_grid)
+        self.chemo_grid = scipy.signal.convolve2d(self.chemo_grid, chemo_kernel, mode='same')
+        self.chemo_grid = self.chemo_grid * (1 - self.c.chemo_damping)
 
-    # To achieve the desired color,the target color channel is set to 255,
-    # and the other two are *decreased* in proportion to the value in the
-    # trail/chemo map. This makes low values close to white, and high
-    # values a dark color.
-    red_channel = np.full_like(agent_colormap, 255)
-    green_channel = np.full_like(agent_colormap, 255)
-    blue_channel = np.full_like(agent_colormap, 255)
+        # reset the values in the food sources to the default
+        not_food_grid = self.food_grid == 0
+        self.chemo_grid = np.multiply(not_food_grid, self.chemo_grid) + \
+            self.food_grid * self.c.chemo_deposit
 
-    if c.display_chemo:
-        # TODO make chemo spreading visual when trails are also visible
-        # intensity transformation, strictly for visual purposes
-        # clipping the map back to [0, 255]
-        intensity = 30
-        chemo_colormap = np.minimum(intensity * chemo_colormap, 255)
-        chemo_colormap = np.full_like(chemo_colormap, 255) - chemo_colormap # inverting the map
+        # trail grid
+        trail_kernel = np.ones(
+            (self.c.trail_filter_size, self.c.trail_filter_size)
+        ) * (1 / self.c.trail_filter_size**2)
 
-        red_channel = np.full_like(chemo_colormap, 255)
-        green_channel = chemo_colormap
-        blue_channel = np.copy(chemo_colormap)
+        self.trail_grid = scipy.signal.convolve2d(self.trail_grid, trail_kernel, mode='same')
+        self.trail_grid = self.trail_grid * (1 - self.c.trail_damping)
 
-    if c.display_trail:
-        # intensity transformation, strictly for visual purposes
-        # clipping the map back to [0, 255]
-        intensity = 10
-        trail_colormap = np.minimum(intensity * trail_colormap, 255)
-        trail_colormap = np.full_like(trail_colormap, 255) - trail_colormap # inverting the map
 
-        trail_pixels = trail_colormap < 255
-        not_trail_pixels = trail_colormap == 255
+    def pixelmap(self):
+        """Create a pixelmap of the scene on the gpu that can be drawn directly."""
+        # create a black and white colormap based on where there are agents
+        agent_colormap = ((1 - self.mask_grid) * 255)
 
-        red_channel = red_channel * not_trail_pixels + trail_colormap * trail_pixels
-        green_channel = green_channel * not_trail_pixels + trail_colormap * trail_pixels
-        blue_channel = blue_channel * not_trail_pixels + np.full_like(blue_channel, 255) * trail_pixels
+        # create colormap for trails and food source, blue and red respectively
+        # upscale trail and chemo maps
+        trail_colormap = np.copy(self.trail_grid)
+        chemo_colormap = np.copy(self.chemo_grid)
+        food_colormap  = np.copy(self.food_grid)
 
-    if c.display_agents:
-        agent_pixels = agent_colormap == 0
-        not_agent_pixels = agent_colormap == 255
+        # To achieve the desired color,the target color channel is set to 255,
+        # and the other two are *decreased* in proportion to the value in the
+        # trail/chemo map. This makes low values close to white, and high
+        # values a dark color.
+        red_channel = np.full_like(agent_colormap, 255)
+        green_channel = np.full_like(agent_colormap, 255)
+        blue_channel = np.full_like(agent_colormap, 255)
 
-        red_channel = red_channel * not_agent_pixels + agent_colormap * agent_pixels
-        green_channel = green_channel * not_agent_pixels + agent_colormap * agent_pixels
-        blue_channel = blue_channel * not_agent_pixels + agent_colormap * agent_pixels
+        if self.c.display_chemo:
+            # TODO make chemo spreading visual when trails are also visible
+            # intensity transformation, strictly for visual purposes
+            # clipping the map back to [0, 255]
+            intensity = 30
+            chemo_colormap = np.minimum(intensity * chemo_colormap, 255)
+            chemo_colormap = np.full_like(chemo_colormap, 255) - chemo_colormap # inverting the map
 
-    if c.display_food:
-        # placing food sources on top of everything
-        food_pixels = food_colormap > 0
-        not_food_pixels = food_colormap == 0
+            red_channel = np.full_like(chemo_colormap, 255)
+            green_channel = chemo_colormap
+            blue_channel = np.copy(chemo_colormap)
 
-        red_channel = red_channel * not_food_pixels + np.full_like(red_channel, 255) * food_pixels
-        green_channel = green_channel * not_food_pixels + np.zeros_like(green_channel) * food_pixels
-        blue_channel = blue_channel * not_food_pixels + np.zeros_like(blue_channel) * food_pixels
+        if self.c.display_trail:
+            # intensity transformation, strictly for visual purposes
+            # clipping the map back to [0, 255]
+            intensity = 10
+            trail_colormap = np.minimum(intensity * trail_colormap, 255)
+            trail_colormap = np.full_like(trail_colormap, 255) - trail_colormap # inverting the map
 
-    pixelmap = np.stack(
-        (red_channel.astype(np.uint8), green_channel.astype(np.uint8), blue_channel.astype(np.uint8)),
-        axis=-1
-    )
+            trail_pixels = trail_colormap < 255
+            not_trail_pixels = trail_colormap == 255
 
-    # transpose from shape (height, width, 3) to (width, height, 3) for pygame
-    transposed_pixelmap = np.transpose(pixelmap, (1, 0, 2))
-    scaled_pixelmap = transposed_pixelmap.repeat(c.upscale, axis=0).repeat(c.upscale, axis=1)
+            red_channel = red_channel * not_trail_pixels + trail_colormap * trail_pixels
+            green_channel = green_channel * not_trail_pixels + trail_colormap * trail_pixels
+            blue_channel = blue_channel * not_trail_pixels + np.full_like(blue_channel, 255) * trail_pixels
 
-    return scaled_pixelmap
+        if self.c.display_agents:
+            agent_pixels = agent_colormap == 0
+            not_agent_pixels = agent_colormap == 255
+
+            red_channel = red_channel * not_agent_pixels + agent_colormap * agent_pixels
+            green_channel = green_channel * not_agent_pixels + agent_colormap * agent_pixels
+            blue_channel = blue_channel * not_agent_pixels + agent_colormap * agent_pixels
+
+        if self.c.display_food:
+            # placing food sources on top of everything
+            food_pixels = food_colormap > 0
+            not_food_pixels = food_colormap == 0
+
+            red_channel = red_channel * not_food_pixels + np.full_like(red_channel, 255) * food_pixels
+            green_channel = green_channel * not_food_pixels + np.zeros_like(green_channel) * food_pixels
+            blue_channel = blue_channel * not_food_pixels + np.zeros_like(blue_channel) * food_pixels
+
+        pixelmap = np.stack(
+            (red_channel.astype(np.uint8), green_channel.astype(np.uint8), blue_channel.astype(np.uint8)),
+            axis=-1
+        )
+
+        # transpose from shape (height, width, 3) to (width, height, 3) for pygame
+        transposed_pixelmap = np.transpose(pixelmap, (1, 0, 2))
+        scaled_pixelmap = transposed_pixelmap.repeat(self.c.upscale, axis=0).repeat(self.c.upscale, axis=1)
+
+        return scaled_pixelmap

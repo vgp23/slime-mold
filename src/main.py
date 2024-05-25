@@ -10,9 +10,7 @@ import copy
 
 class Config:
 
-    def __init__(self):
-        # TODO process kwargs to override default values
-
+    def __init__(self, **kwargs):
         self.height = 100
         self.width = 100
         self.upscale = 10
@@ -45,6 +43,10 @@ class Config:
         self.display_trail = True
         self.display_agents = True
         self.display_food = True
+
+        # set user input configuration settings
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
 
 def wait_for_spacebar():
@@ -98,10 +100,10 @@ def scene_update(i, limit):
                     return min(i + 1, limit)
 
 
-def draw(scene, c, screen, font, i=None):
+def draw(scene, screen, font, i=None):
     """Draw the scene to the screen."""
     # draw the scene
-    surface = pygame.pixelcopy.make_surface(scene_pixelmap(scene, c))
+    surface = pygame.pixelcopy.make_surface(scene.pixelmap())
     screen.blit(surface, (0, 0))
 
     # draw iteration counter
@@ -123,7 +125,7 @@ def visualise(scenes, c, i=None):
         i = limit
 
     while True:
-        draw(scenes[i], c, screen, font, i)
+        draw(scenes[i], screen, font, i)
         i = scene_update(i, limit)
 
         if i is None:
@@ -137,12 +139,12 @@ def run_with_gui(c, num_iter=np.inf):
     font = pygame.font.Font(None, 48)
     screen = pygame.display.set_mode(c.upscale * np.array([c.width, c.height]))
 
-    scene = scene_init(c)
+    scene = Scene(c)
 
     i = 0
     while i < num_iter:
-        scene = scene_step(scene, c)
-        draw(scene, c, screen, font, i)
+        scene.step()
+        draw(scene, screen, font, i)
 
         if check_interrupt():
             pygame.quit()
@@ -158,26 +160,27 @@ def run_with_gui(c, num_iter=np.inf):
 
 def run_headless(c, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
-    scene = scene_init(c)
-    scenes = [scene]
+    scenes = [Scene(c)]
 
     for _ in range(num_iter):
-        scenes.append(copy.deepcopy(scene_step(scenes[-1], c)))
+        scenes[-1].step()
+        scenes.append(copy.deepcopy(scenes[-1]))
 
     return scenes
 
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
+    np.random.seed(37)
     c = Config()
 
     # run an experiment with gui
-    t0 = time.time()
-    run_with_gui(c)
-    print(time.time() - t0)
+    # t0 = time.time()
+    # run_with_gui(c)
+    # print(time.time() - t0)
 
     # run an experiment headless
-    # t0 = time.time()
-    # scenes = run_headless(c, num_iter=100)
-    # print(time.time() - t0)
-    # visualise(scenes, c)
+    t0 = time.time()
+    scenes = run_headless(c, num_iter=100)
+    print(time.time() - t0)
+    visualise(scenes, c)
