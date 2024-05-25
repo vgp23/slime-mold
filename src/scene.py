@@ -4,6 +4,7 @@ import scipy
 import copy
 import time
 from vector import Vector2D
+from main import Config
 
 class Scene:
 
@@ -37,6 +38,11 @@ class Scene:
         # grid position that has not yet been iterated over, leading to an agent
         # moving multiple times.
         self.to_update = np.full_like(self.mask_grid, True)
+
+        self.wall_grid = np.full_like(self.mask_grid, False)
+
+        # modifications to check if it works
+        self.wall_grid[5,5] = True
 
 
     def out_of_bounds(self, pos):
@@ -267,3 +273,7 @@ class Scene:
         scaled_pixelmap = transposed_pixelmap.repeat(self.c.upscale, axis=0).repeat(self.c.upscale, axis=1)
 
         return scaled_pixelmap
+
+if __name__ == '__main__':
+    c = Config()
+    scene = Scene(c)

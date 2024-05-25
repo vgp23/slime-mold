@@ -15,6 +15,13 @@ class Config:
     def __init__(self, **kwargs):
         self.height = 100
         self.width = 100
+
+        self.wall_size_height =
+        self.wall_size_width =
+
+        self.wall_num_height =
+        self.wall_num_width =
+
         self.upscale = 10
         self.initial_population_density = 0.5
 
@@ -32,6 +39,7 @@ class Config:
         self.reproduction_trigger = 15
         self.elimination_trigger = -10
 
+        # food settings
         self.food_deposit = 10
         self.food_amount = 10
         self.food_size = 3
@@ -177,12 +185,12 @@ if __name__ == '__main__':
     c = Config()
 
     # run an experiment with gui
-    # t0 = time.time()
-    # run_with_gui(c)
-    # print(time.time() - t0)
+    t0 = time.time()
+    run_with_gui(c)
+    print(time.time() - t0)
 
     # run an experiment headless
-    t0 = time.time()
-    scenes = run_headless(c, num_iter=1000)
-    print(time.time() - t0)
-    visualise(scenes, c)
+    # t0 = time.time()
+    # scenes = run_headless(c, num_iter=1000)
+    # print(time.time() - t0)
+    # visualise(scenes, c)
