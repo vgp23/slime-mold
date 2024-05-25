@@ -78,21 +78,21 @@ class Scene:
         # mvalue = sensor_value(mcoord)
         rvalue = sensor_value(rcoord)
 
-        # check if the sensors are out of bounds
-        if lvalue == -np.inf and rvalue == -np.inf:
-            agent.rotate_180()
-            agent.counter -= 1
-            return
+        # # check if the sensors are out of bounds
+        # if lvalue == -np.inf and rvalue == -np.inf:
+        #     agent.rotate_180()
+        #     agent.counter -= 1
+        #     return
 
-        if lvalue == -np.inf:
-            agent.rotate_right()
-            agent.counter -= 1
-            return
+        # if lvalue == -np.inf:
+        #     agent.rotate_right()
+        #     agent.counter -= 1
+        #     return
 
-        if rvalue == -np.inf:
-            agent.rotate_left()
-            agent.counter -= 1
-            return
+        # if rvalue == -np.inf:
+        #     agent.rotate_left()
+        #     agent.counter -= 1
+        #     return
 
         # update direction based on which is larger
         if lvalue > rvalue:
@@ -123,7 +123,7 @@ class Scene:
         self.mask_grid[coordinate.y, coordinate.x] = False
 
         # deposit trail at the new position
-        self.trail_grid[new_pos.y, new_pos.x] += self.c.trail_deposit
+        self.trail_grid[new_pos.y, new_pos.x] += self.c.trail_deposit * self.chemo_grid[new_pos.y, new_pos.x] / self.c.chemo_deposit
 
 
     def reproduce(self, coordinate):
@@ -137,6 +137,9 @@ class Scene:
     def agent_present(self, coordinate):
         '''Computes a position update for the given agent.'''
         agent = self.agent_grid[coordinate.y, coordinate.x]
+
+        if self.chemo_grid[coordinate.y, coordinate.x] < 0.1:
+            agent.counter -= 0.4
 
         # If the elimination trigger is met, remove agent.
         # Otherwise, attempt to move forward.
@@ -168,6 +171,7 @@ class Scene:
         coordinates = np.random.permutation(grid_coordinates)  # [(y, x)]
 
         self.to_update = np.full_like(self.mask_grid, True)
+
 
         # step through all the coordinates and update the agents on those positions
         for coordinate in coordinates:

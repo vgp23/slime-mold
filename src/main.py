@@ -6,8 +6,6 @@ import collections
 import pygame
 import time
 import copy
-import os
-os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 
 class Config:
@@ -23,7 +21,7 @@ class Config:
         self.width = self.wall_width * (2 * self.wall_num_width + 1)
 
         self.upscale = 10
-        self.initial_population_density = 0.5
+        self.initial_population_density = 0.01
 
         self.trail_deposit = 5
         self.trail_damping = 0.1
@@ -35,7 +33,7 @@ class Config:
         self.chemo_filter_size = 5
         self.chemo_weight = 1 - self.trail_weight
 
-        self.sensor_length = 4 # DECREASED
+        self.sensor_length = 3 # DECREASED
         self.reproduction_trigger = 15
         self.elimination_trigger = -10
 
