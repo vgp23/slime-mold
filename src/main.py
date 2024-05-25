@@ -11,17 +11,17 @@ import copy
 class Config:
 
     def __init__(self, **kwargs):
-        self.wall_num_height = 6
-        self.wall_num_width = 6
+        self.wall_num_height = 5
+        self.wall_num_width = 5
 
-        self.wall_height = 10
-        self.wall_width = 10
+        self.wall_height = 15
+        self.wall_width = 15
 
         self.height = self.wall_height * (2 * self.wall_num_height + 1)
         self.width = self.wall_width * (2 * self.wall_num_width + 1)
 
-        self.upscale = 10
-        self.initial_population_density = 0.01
+        self.upscale = 9
+        self.initial_population_density = 0.5
 
         self.trail_deposit = 5
         self.trail_damping = 0.1
@@ -48,7 +48,7 @@ class Config:
 
         # visualization settings
         self.display_chemo = True
-        self.display_trail = True
+        self.display_trail = False
         self.display_agents = True
         self.display_food = True
 
@@ -179,7 +179,7 @@ def run_headless(c, num_iter=20000):
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    np.random.seed(37)
+    # np.random.seed(37)
     c = Config()
 
     # run an experiment with gui

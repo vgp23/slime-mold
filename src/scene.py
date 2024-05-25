@@ -123,7 +123,7 @@ class Scene:
         self.mask_grid[coordinate.y, coordinate.x] = False
 
         # deposit trail at the new position
-        self.trail_grid[new_pos.y, new_pos.x] += self.c.trail_deposit * self.chemo_grid[new_pos.y, new_pos.x] / self.c.chemo_deposit
+        self.trail_grid[new_pos.y, new_pos.x] += self.c.trail_deposit# + self.chemo_grid[new_pos.y, new_pos.x]
 
 
     def reproduce(self, coordinate):
@@ -139,7 +139,7 @@ class Scene:
         agent = self.agent_grid[coordinate.y, coordinate.x]
 
         if self.chemo_grid[coordinate.y, coordinate.x] < 0.1:
-            agent.counter -= 0.4
+            agent.counter -= 0.5
 
         # If the elimination trigger is met, remove agent.
         # Otherwise, attempt to move forward.
