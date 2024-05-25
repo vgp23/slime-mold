@@ -65,11 +65,30 @@ class Scene:
         # mvalue = sensor_value(mcoord)
         rvalue = sensor_value(rcoord)
 
+        # check if the sensors are out of bounds
+        if lvalue == -np.inf and rvalue == -np.inf:
+            agent.rotate_180()
+            agent.counter -= 1
+            return
+
+        if lvalue == -np.inf:
+            agent.rotate_right()
+            agent.counter -= 1
+            return
+
+        if rvalue == -np.inf:
+            agent.rotate_left()
+            agent.counter -= 1
+            return
+
         # update direction based on which is larger
         if lvalue > rvalue:
             agent.rotate_left()
+            return
+
         if lvalue < rvalue:
             agent.rotate_right()
+            return
 
 
     def move_agent(self, agent, coordinate):

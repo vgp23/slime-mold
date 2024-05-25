@@ -6,6 +6,8 @@ import collections
 import pygame
 import time
 import copy
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
 
 
 class Config:
@@ -22,7 +24,7 @@ class Config:
         self.trail_weight = 0.1
 
         self.chemo_deposit = 10
-        self.chemo_damping = 0.2
+        self.chemo_damping = 0.1
         self.chemo_filter_size = 5
         self.chemo_weight = 1 - self.trail_weight
 
@@ -40,13 +42,13 @@ class Config:
 
         # visualization settings
         self.display_chemo = True
-        self.display_trail = True
+        self.display_trail = False
         self.display_agents = True
         self.display_food = True
 
-        # set user input configuration settings
-        for key, value in kwargs.items():
-            setattr(self, key, value)
+        # # set user input configuration settings
+        # for key, value in kwargs.items():
+        #     setattr(self, key, value)
 
 
 def wait_for_spacebar():
@@ -181,6 +183,6 @@ if __name__ == '__main__':
 
     # run an experiment headless
     t0 = time.time()
-    scenes = run_headless(c, num_iter=100)
+    scenes = run_headless(c, num_iter=1000)
     print(time.time() - t0)
     visualise(scenes, c)

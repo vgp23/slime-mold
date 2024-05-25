@@ -40,3 +40,7 @@ class Agent:
 
     def rotate_right(self):
         self.index = (self.index + 1) % len(Agent.directions)
+
+
+    def rotate_180(self):
+        self.index = (self.index + 4) % len(Agent.directions)
