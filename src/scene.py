@@ -51,7 +51,7 @@ class Scene:
                 ] = True
 
         # kill all agents in walls
-        # self.agent_grid[self.wall_mask == True] = None
+        self.agent_grid[self.wall_mask == True] = None
 
 
     def out_of_bounds(self, pos):
@@ -82,23 +82,20 @@ class Scene:
         rvalue = sensor_value(rcoord)
 
         # check if the sensors are out of bounds
-        # while True:
-        #     if lvalue == -np.inf and rvalue == -np.inf:
-        #         agent.rotate_180()
-        #         agent.counter -= 1
-        #         continue
+        if lvalue == -np.inf and rvalue == -np.inf:
+            agent.rotate_180()
+            agent.counter -= 1
+            return
 
-        #     if lvalue == -np.inf:
-        #         agent.rotate_right()
-        #         agent.counter -= 1
-        #         continue
+        if lvalue == -np.inf:
+            agent.rotate_right()
+            agent.counter -= 1
+            return
 
-        #     if rvalue == -np.inf:
-        #         agent.rotate_left()
-        #         agent.counter -= 1
-        #         continue
-
-        #     break
+        if rvalue == -np.inf:
+            agent.rotate_left()
+            agent.counter -= 1
+            return
 
         # update direction based on which is larger
         if lvalue > rvalue:
@@ -223,6 +220,7 @@ class Scene:
         # creating a colormap for the walls
 
         agent_colormap = ((1 - ((self.agent_grid != None) | self.wall_mask)) * 255)
+        # agent_colormap = ((1 - (self.agent_grid != None)) * 255)
         # agent_colormap = ((1 - self.wall_mask) * 255)
 
         # create colormap for trails and food source, blue and red respectively
@@ -243,7 +241,7 @@ class Scene:
             # TODO make chemo spreading visual when trails are also visible
             # intensity transformation, strictly for visual purposes
             # clipping the map back to [0, 255]
-            intensity = 30
+            intensity = 50
             chemo_colormap = np.minimum(intensity * chemo_colormap, 255)
             chemo_colormap = np.full_like(chemo_colormap, 255) - chemo_colormap # inverting the map
 

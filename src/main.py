@@ -10,7 +10,7 @@ import copy
 
 class Config:
 
-    def __init__(self, **kwargs):
+    def __init__(self):
         self.wall_num_height = 5
         self.wall_num_width = 5
 
@@ -42,19 +42,30 @@ class Config:
         self.food_amount = 10
         self.food_size = 3
 
-        foods_y = np.random.choice(np.arange(self.height - self.food_size), size=(self.food_amount,))
-        foods_x = np.random.choice(np.arange(self.width - self.food_size), size=(self.food_amount,))
-        self.foods = np.stack((foods_y, foods_x), axis=-1)
-
         # visualization settings
         self.display_chemo = True
-        self.display_trail = True
+        self.display_trail = False
         self.display_agents = True
         self.display_food = True
 
-        # # set user input configuration settings
-        # for key, value in kwargs.items():
-        #     setattr(self, key, value)
+        assert (
+            self.food_size % 2 == 0 and self.wall_height % 2 == 0 and self.wall_width % 2 == 0
+        ) or (
+            self.food_size % 2 == 1 and self.wall_height % 2 == 1 and self.wall_width % 2 == 1
+        ), "both food and wall needs to be odd/even"
+
+        # generate random food sources
+        X, Y = np.meshgrid(np.arange(self.wall_num_width * 2 + 1), np.arange(self.wall_num_height * 2 + 1))
+        coordinates = np.vstack((Y.flatten(), X.flatten())).T  # [(y, x)]
+        mask = ~((coordinates[:, 0] % 2 != 0) & (coordinates[:, 1] % 2 != 0))  # filter out wall coordinates
+        coordinates = coordinates[mask]
+        food_choices = np.random.choice(range(len(coordinates)), size=(self.food_amount,), replace=False)
+        coordinates = coordinates[food_choices]
+
+        # scale the food coordinates
+        coordinates[:, 0] = coordinates[:, 0] * self.wall_height + self.wall_height // 2 - self.food_size // 2
+        coordinates[:, 1] = coordinates[:, 1] * self.wall_width + self.wall_width // 2 - self.food_size // 2
+        self.foods = coordinates
 
 
 def wait_for_spacebar():
