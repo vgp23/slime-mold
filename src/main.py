@@ -39,12 +39,12 @@ class Config:
 
         # food settings
         self.food_deposit = 10
-        self.food_amount = 10
+        self.food_amount = 6
         self.food_size = 3
 
         # visualization settings
         self.display_chemo = True
-        self.display_trail = False
+        self.display_trail = True
         self.display_agents = True
         self.display_food = True
 

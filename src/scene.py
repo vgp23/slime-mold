@@ -138,8 +138,18 @@ class Scene:
         '''Computes a position update for the given agent.'''
         agent = self.agent_grid[coordinate.y, coordinate.x]
 
+        # penalty for being far from food, die earlier
         if self.chemo_grid[coordinate.y, coordinate.x] < 0.1:
-            agent.counter -= 0.4
+            agent.counter -= 0.5
+
+        # pickup food when we can
+        if self.chemo_grid[coordinate.y, coordinate.x] > 1:
+            agent.food += 1
+            agent.food = max(agent.food, self.c.food_deposit)
+        # drop food
+        if agent.food > 0:
+            self.chemo_grid[coordinate.y, coordinate.x] += 0.3
+            agent.food -= 1
 
         # If the elimination trigger is met, remove agent.
         # Otherwise, attempt to move forward.
