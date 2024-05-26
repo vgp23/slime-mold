@@ -25,7 +25,6 @@ class Agent:
     def sensor_directions(self):
         """Compute the directions of the sensors using a sensor map."""
         lsensor = Vector2D(*Agent.directions[(self.index - 1) % len(Agent.directions)])
-        # msensor = Vector2D(*Agent.directions[self.index])
         rsensor = Vector2D(*Agent.directions[(self.index + 1) % len(Agent.directions)])
         return np.array([lsensor, rsensor])
 

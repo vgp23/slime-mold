@@ -63,10 +63,8 @@ class Scene:
     def rotate_sense(self, agent, coordinate):
         '''Rotates agent towards the sensor with the highest calculated value
            as per Wu et al.'''
-        # lsensor, msensor, rsensor = agent.sensor_positions(agent, self.c)
         lsensor, rsensor = agent.sensor_positions(self.c)
         lcoord = coordinate + lsensor
-        # mcoord = coordinate + msensor
         rcoord = coordinate + rsensor
 
         def sensor_value(coord):
@@ -78,7 +76,6 @@ class Scene:
 
         # compute values of sensors
         lvalue = sensor_value(lcoord)
-        # mvalue = sensor_value(mcoord)
         rvalue = sensor_value(rcoord)
 
         # check if the sensors are out of bounds
@@ -139,17 +136,17 @@ class Scene:
         agent = self.agent_grid[coordinate.y, coordinate.x]
 
         # penalty for being far from food, die earlier
-        if self.chemo_grid[coordinate.y, coordinate.x] < 0.1:
-            agent.counter -= 0.5
+        if self.chemo_grid[coordinate.y, coordinate.x] < self.c.starvation_threshold:
+            agent.counter -= self.c.starvation_penalty
 
         # pickup food when we can
-        if self.chemo_grid[coordinate.y, coordinate.x] > 1:
-            agent.food += 1
-            agent.food = max(agent.food, self.c.food_deposit)
+        if self.chemo_grid[coordinate.y, coordinate.x] > self.c.food_pickup_threshold:
+            agent.food += self.c.food_pickup_amount
+            agent.food = max(agent.food, self.c.food_pickup_limit)
         # drop food
-        if agent.food > 0:
-            self.chemo_grid[coordinate.y, coordinate.x] += 0.3
-            agent.food -= 1
+        if agent.food > self.c.food_drop_amount:
+            self.chemo_grid[coordinate.y, coordinate.x] += self.c.food_drop_amount
+            agent.food -= self.c.food_drop_amount
 
         # If the elimination trigger is met, remove agent.
         # Otherwise, attempt to move forward.
@@ -251,7 +248,7 @@ class Scene:
             # TODO make chemo spreading visual when trails are also visible
             # intensity transformation, strictly for visual purposes
             # clipping the map back to [0, 255]
-            intensity = 50
+            intensity = 100
             chemo_colormap = np.minimum(intensity * chemo_colormap, 255)
             chemo_colormap = np.full_like(chemo_colormap, 255) - chemo_colormap # inverting the map
 

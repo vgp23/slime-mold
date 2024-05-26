@@ -10,7 +10,7 @@ import copy
 
 class Config:
 
-    def __init__(self):
+    def __init__(self, seed=np.random.random()):
         self.wall_num_height = 5
         self.wall_num_width = 5
 
@@ -30,17 +30,29 @@ class Config:
 
         self.chemo_deposit = 10
         self.chemo_damping = 0.1
-        self.chemo_filter_size = 5
+        self.chemo_filter_size = 3
         self.chemo_weight = 1 - self.trail_weight
 
         self.sensor_length = 4 # DECREASED
         self.reproduction_trigger = 15
         self.elimination_trigger = -10
 
-        # food settings
+        # penalty for being far from food
+        self.starvation_penalty = 0.5
+        self.starvation_threshold = 0.1
+
+        # food source settings
         self.food_deposit = 10
-        self.food_amount = 6
+        self.food_amount = 8
         self.food_size = 3
+
+        # food pickup
+        self.food_pickup_threshold = 1
+        self.food_pickup_amount = 1
+        self.food_pickup_limit = self.food_deposit
+
+        # food drop
+        self.food_drop_amount = 0.3
 
         # visualization settings
         self.display_chemo = True
@@ -55,12 +67,14 @@ class Config:
         ), "both food and wall needs to be odd/even"
 
         # generate random food sources
+        np.random.seed(seed)
         X, Y = np.meshgrid(np.arange(self.wall_num_width * 2 + 1), np.arange(self.wall_num_height * 2 + 1))
         coordinates = np.vstack((Y.flatten(), X.flatten())).T  # [(y, x)]
         mask = ~((coordinates[:, 0] % 2 != 0) & (coordinates[:, 1] % 2 != 0))  # filter out wall coordinates
         coordinates = coordinates[mask]
         food_choices = np.random.choice(range(len(coordinates)), size=(self.food_amount,), replace=False)
         coordinates = coordinates[food_choices]
+        np.random.seed()
 
         # scale the food coordinates
         coordinates[:, 0] = coordinates[:, 0] * self.wall_height + self.wall_height // 2 - self.food_size // 2
@@ -190,12 +204,11 @@ def run_headless(c, num_iter=20000):
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    # np.random.seed(37)
-    c = Config()
+    c = Config(seed=37)
 
     # run an experiment with gui
     t0 = time.time()
-    run_with_gui(c)
+    run_with_gui(c, num_iter=1000)
     print(time.time() - t0)
 
     # run an experiment headless
