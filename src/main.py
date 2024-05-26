@@ -20,7 +20,7 @@ class Config:
         self.height = self.wall_height * (2 * self.wall_num_height + 1)
         self.width = self.wall_width * (2 * self.wall_num_width + 1)
 
-        self.upscale = 9
+        self.upscale = 7
         self.initial_population_density = 0.5
 
         self.trail_deposit = 5
@@ -33,7 +33,7 @@ class Config:
         self.chemo_filter_size = 5
         self.chemo_weight = 1 - self.trail_weight
 
-        self.sensor_length = 3 # DECREASED
+        self.sensor_length = 4 # DECREASED
         self.reproduction_trigger = 15
         self.elimination_trigger = -10
 
@@ -48,7 +48,7 @@ class Config:
 
         # visualization settings
         self.display_chemo = True
-        self.display_trail = False
+        self.display_trail = True
         self.display_agents = True
         self.display_food = True
 

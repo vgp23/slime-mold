@@ -11,6 +11,7 @@ class Agent:
         """Generate a random new agent."""
         self.index = np.random.randint(len(Agent.directions))
         self.counter = 0
+        self.food = 0
 
 
     def random_direction(self):
