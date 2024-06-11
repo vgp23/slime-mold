@@ -34,11 +34,11 @@ class Config:
         self.chemo_weight = 1 - self.trail_weight
 
         self.sensor_length = 4 # DECREASED
-        self.reproduction_trigger = 15
-        self.elimination_trigger = -10
+        self.reproduction_threshold = 15
+        self.elimination_threshold = -10
 
         # penalty for being far from food
-        self.starvation_penalty = 0.5
+        self.starvation_penalty = 0.7
         self.starvation_threshold = 0.1
 
         # food source settings
@@ -92,6 +92,7 @@ class Config:
         # sample food coordinates and scale accordingly
         food_choices = np.random.choice(range(len(coordinates)), size=(self.food_amount,), replace=False)
         food_coordinates = coordinates[food_choices]
+        self.foods_unscaled = copy.deepcopy(food_coordinates)
         food_coordinates[:, 0] = food_coordinates[:, 0] * self.wall_height + self.wall_height // 2 - self.food_size // 2
         food_coordinates[:, 1] = food_coordinates[:, 1] * self.wall_width + self.wall_width // 2 - self.food_size // 2
         self.foods = food_coordinates
@@ -229,14 +230,15 @@ def run_headless(c, num_iter=20000):
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    c = Config(37)
+    c = Config()
     # run an experiment with gui
     # t0 = time.time()
-    scene = run_with_gui(c, num_iter=1000)
+    # scene = run_with_gui(c, num_iter=np.inf)
     # print(time.time() - t0)
 
     # run an experiment headless
     # t0 = time.time()
-    # scenes = run_headless(c, num_iter=1000)
+    scenes = run_headless(c, num_iter=10)
     # print(time.time() - t0)
-    # visualise(scenes, c)
+    print(scenes[0].graph().mst())
+    visualise(scenes, c)

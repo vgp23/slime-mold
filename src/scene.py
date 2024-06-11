@@ -1,4 +1,5 @@
 from agent import *
+from graph import *
 import numpy as np
 import scipy
 import copy
@@ -154,7 +155,7 @@ class Scene:
 
         # If the elimination trigger is met, remove agent.
         # Otherwise, attempt to move forward.
-        if agent.counter < self.c.elimination_trigger:
+        if agent.counter < self.c.elimination_threshold:
             self.agent_grid[coordinate.y, coordinate.x] = None
         else:
             new_pos = coordinate + agent.direction()
@@ -165,7 +166,7 @@ class Scene:
                 self.move_agent(agent, coordinate)
 
                 # if the reproduction trigger is met, generate new agent in the current agent's old position
-                if self.agent_grid[new_pos.y, new_pos.x].counter > self.c.reproduction_trigger:
+                if self.agent_grid[new_pos.y, new_pos.x].counter > self.c.reproduction_threshold:
                     self.reproduce(coordinate)
             else:
                 agent.random_direction()
@@ -301,13 +302,12 @@ class Scene:
         return sufficient_agent
 
 
-    def get_graph(self):
+    def graph(self):
         """Extract graph representation from a scene. Each empty patch in the
         scene represents a node."""
 
-        # use the history moving average
+        # place all the agent grid masks in the history on top of each other
         mask_grid_sum = np.any(self.mask_grid_history, axis=0).astype(int)
-
         adjacency_list = np.full((len(self.c.all_coordinates_unscaled), 4), -1, dtype=int)
 
         # only used for visualization
@@ -329,9 +329,6 @@ class Scene:
             # robust formation of edges around corners (agents may not be
             # present all the time)
             patch_filled = False
-            # if np.sum(agent_patch) >= self.c.agent_cutoff or \
-            #         np.sum(trail_patch) > self.c.patch_cutoff:
-            #             patch_filled = True
             if np.sum(agent_patch) >= self.c.agent_cutoff:
                 patch_filled = True
 
@@ -355,20 +352,13 @@ class Scene:
                     if not np.isin(index, adjacency_list[other_index]):
                         adjacency_list[index][adjacency_index] = -1
 
-        return adjacency_list, patches_filled
+        return Graph(adjacency_list, patches_filled, self.c)
 
 
     def pixelmap(self):
         """Create a pixelmap of the scene on the gpu that can be drawn directly."""
         # create a black and white colormap based on
         # creating a colormap for the walls
-
-        # diagnostics, shows a green pixel in patches considered "filled", and shows
-        # green "arms" in directions of valid edges
-        if self.c.display_graph:
-            adjacency_list, patches_filled = self.get_graph()
-            idx_filled_patches = np.argwhere(patches_filled)
-            filled_patch_coords = np.squeeze(self.c.all_coordinates_scaled[idx_filled_patches])
 
         if self.c.display_history:
             mask_grid = np.any(self.mask_grid_history, axis=0).astype(int)
@@ -438,6 +428,15 @@ class Scene:
             blue_channel = blue_channel * not_food_pixels + np.zeros_like(blue_channel) * food_pixels
 
         if self.c.display_graph:
+            # diagnostics, shows a green pixel in patches considered "filled", and shows
+            # green "arms" in directions of valid edges
+            graph = self.graph()
+            patches_filled = graph.nodes
+            adjacency_list = graph.adj
+
+            idx_filled_patches = np.argwhere(patches_filled)
+            filled_patch_coords = np.squeeze(self.c.all_coordinates_scaled[idx_filled_patches])
+
             # place a green pixel at the center of each filled patch
             red_channel[filled_patch_coords[:,0], filled_patch_coords[:,1]] = 0
             blue_channel[filled_patch_coords[:,0], filled_patch_coords[:,1]] = 0
