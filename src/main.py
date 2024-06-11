@@ -34,22 +34,19 @@ class Config:
         self.food_filter_size = 3
         self.food_weight = 1 - self.trail_weight
         self.food_size = 3
-        self.num_food = 3
+        self.num_food = 5
 
         self.sensor_length = 4 # DECREASED
         self.reproduction_threshold = 15
         self.elimination_threshold = -10
 
         # penalty for being far from food
-        self.starvation_penalty = 0.7
+        self.starvation_penalty = 0.5
         self.starvation_threshold = 0.1
 
         # food pickup
         self.food_pickup_threshold = 1
-        self.food_pickup_amount = 1
         self.food_pickup_limit = self.food_deposit
-
-        # food drop
         self.food_drop_amount = 0.3
 
         # visualization settings
@@ -228,7 +225,7 @@ def run_headless(c, num_iter=20000):
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    c = Config()
+    c = Config(seed=38)
     # run an experiment with gui
     # t0 = time.time()
     scene = run_with_gui(c, num_iter=np.inf)
@@ -236,7 +233,7 @@ if __name__ == '__main__':
 
     # run an experiment headless
     # t0 = time.time()
-    scenes = run_headless(c, num_iter=10)
+    # scenes = run_headless(c, num_iter=10)
     # print(time.time() - t0)
-    print(scenes[0].graph().mst())
-    visualise(scenes, c)
+    # print(scenes[0].graph().mst())
+    # visualise(scenes, c)

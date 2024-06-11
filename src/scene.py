@@ -25,8 +25,8 @@ class Scene:
 
         self.trail_grid = np.zeros((c.height, c.width))  # contains trail data
 
-        # Contains chemo-nutrient/food data. Also need a binary mask of the initial
-        # chemo grid, to keep food source values constant across iterations.
+        # Contains food-nutrient/food data. Also need a binary mask of the initial
+        # food grid, to keep food source values constant across iterations.
         self.food_grid = np.zeros((c.height, c.width))
         for food in c.foods:
             self.food_grid[
@@ -146,8 +146,8 @@ class Scene:
 
         # pickup food when we can
         if self.food_grid[coordinate.y, coordinate.x] > self.c.food_pickup_threshold:
-            agent.food += self.c.food_pickup_amount
-            agent.food = max(agent.food, self.c.food_pickup_limit)
+            agent.food += self.food_grid[coordinate.y, coordinate.x]
+            agent.food = min(agent.food, self.c.food_pickup_limit)
         # drop food
         if agent.food > self.c.food_drop_amount:
             self.food_grid[coordinate.y, coordinate.x] += self.c.food_drop_amount
@@ -201,10 +201,10 @@ class Scene:
 
 
     def diffuse(self):
-        """Convolve both the chemo and trail with an average filter after all
+        """Convolve both the food and trail with an average filter after all
         agents have been updated + rotated."""
 
-        # chemo grid
+        # food grid
         food_kernel = np.ones(
             (self.c.food_filter_size, self.c.food_filter_size)
         ) * (1 / self.c.food_filter_size**2)
@@ -371,21 +371,21 @@ class Scene:
             agent_colormap = (1 - mask_grid) * 255
 
         # create colormap for trails and food source, blue and red respectively
-        # upscale trail and chemo maps
+        # upscale trail and food maps
         trail_colormap = np.copy(self.trail_grid)
         food_colormap = np.copy(self.food_grid)
         food_sources_colormap  = np.copy(self.food_sources_grid)
 
         # To achieve the desired color,the target color channel is set to 255,
         # and the other two are *decreased* in proportion to the value in the
-        # trail/chemo map. This makes low values close to white, and high
+        # trail/food map. This makes low values close to white, and high
         # values a dark color.
         red_channel = np.full_like(agent_colormap, 255)
         green_channel = np.full_like(agent_colormap, 255)
         blue_channel = np.full_like(agent_colormap, 255)
 
         if self.c.display_food:
-            # TODO make chemo spreading visual when trails are also visible
+            # TODO make food spreading visual when trails are also visible
             # intensity transformation, strictly for visual purposes
             # clipping the map back to [0, 255]
             intensity = 100
