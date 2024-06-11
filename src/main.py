@@ -20,7 +20,7 @@ class Config:
         self.height = self.wall_height * (2 * self.wall_num_height + 1)
         self.width = self.wall_width * (2 * self.wall_num_width + 1)
 
-        self.upscale = 5
+        self.upscale = 9
         self.initial_population_density = 0.5
 
         self.trail_deposit = 5
@@ -63,10 +63,12 @@ class Config:
         self.display_objective_results = True
 
         # objective function parameters
+        self.triangle_agent_cutoff = 2
         self.agent_cutoff = 1
         self.patch_cutoff = 45
-        self.triangle_cutoff = 10
-        self.patch_edge_cutoff = 10
+        self.triangle_cutoff = 30
+        self.patch_edge_cutoff = 20
+        self.history_size = 30
 
         assert (
             self.food_size % 2 == 0 and self.wall_height % 2 == 0 and self.wall_width % 2 == 0
@@ -77,7 +79,7 @@ class Config:
         # generate random food sources
 
         # assume a wall and empty space to each have a width of 1,
-        # sample from the empty spaces to get food locations, and 
+        # sample from the empty spaces to get food locations, and
         # scale these coordinates up according to the actual dimensions.
         # np.random.seed(seed)
         X, Y = np.meshgrid(np.arange(self.wall_num_width * 2 + 1), np.arange(self.wall_num_height * 2 + 1))
@@ -98,7 +100,6 @@ class Config:
         coordinates[:, 0] = coordinates[:, 0] * self.wall_height + self.wall_height // 2
         coordinates[:, 1] = coordinates[:, 1] * self.wall_width + self.wall_width // 2
         self.all_coordinates_scaled = coordinates
-        # print(self.all_coordinates_unscaled)
 
 
 def wait_for_spacebar():
@@ -228,7 +229,7 @@ if __name__ == '__main__':
     c = Config(seed=37)
     # run an experiment with gui
     # t0 = time.time()
-    scene = run_with_gui(c, num_iter=1000)
+    scene = run_with_gui(c, num_iter=10000)
     # print(time.time() - t0)
 
     # run an experiment headless
