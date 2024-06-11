@@ -55,10 +55,7 @@ class Scene:
 
         # initialize the history grids
         self.mask_grid_history = np.full((c.history_size, c.height, c.width), False)
-        self.trail_grid_history = np.zeros((c.history_size, c.height, c.width))
-
         self.mask_grid_history[0] = copy.deepcopy(mask_grid)
-        self.trail_grid_history[0] = copy.deepcopy(self.trail_grid)
 
 
     def out_of_bounds(self, pos):
@@ -199,10 +196,7 @@ class Scene:
 
         # save new states to the history
         self.mask_grid_history = np.roll(self.mask_grid_history, 1, axis=0)
-        self.trail_grid_history = np.roll(self.trail_grid_history, 1, axis=0)
-
         self.mask_grid_history[0] = copy.deepcopy(self.agent_grid != None)
-        self.trail_grid_history[0] = copy.deepcopy(self.trail_grid)
 
 
     def diffuse(self):
@@ -274,7 +268,7 @@ class Scene:
         return valid_nodes
 
 
-    def verify_adjacents(self, trail_patch, agent_patch):
+    def verify_adjacents(self, agent_patch):
         """Determines which of the edges of the patch are significantly covered
         by the trail. Returns a boolean array, one index for each edge."""
 
@@ -297,27 +291,14 @@ class Scene:
 
         # divide the square into 4 triangles. The amount of trail in each triangle
         # determines whether an "edge" of slime mold is really present there.
-        triangle_masks = get_triangle_masks(trail_patch.shape[0])
+        triangle_masks = get_triangle_masks(agent_patch.shape[0])
 
-        sufficient_trail = np.full(4, False)
         sufficient_agent = np.full(4, False)
         for i, mask in enumerate(triangle_masks):
-            sufficient_trail[i] = \
-                np.sum(np.multiply(mask, trail_patch)) > self.c.triangle_cutoff
-
             sufficient_agent[i] = \
                 np.sum(np.multiply(mask, agent_patch)) > self.c.triangle_agent_cutoff
 
-        # only accept this as adjacent direction if the edge of the square in
-        # that direction also has trail (otherwise we have a disconnected blob
-        # of slime mold)
-        trail_on_edge = np.full(4, False)
-        trail_on_edge[0] = np.sum(trail_patch[0,:]) > self.c.patch_edge_cutoff # top
-        trail_on_edge[1] = np.sum(trail_patch[:,-1]) > self.c.patch_edge_cutoff # right
-        trail_on_edge[2] = np.sum(trail_patch[-1,:]) > self.c.patch_edge_cutoff # bottom
-        trail_on_edge[3] = np.sum(trail_patch[:,0]) > self.c.patch_edge_cutoff # left
-
-        return sufficient_agent #| (sufficient_trail & trail_on_edge)
+        return sufficient_agent
 
 
     def get_graph(self):
@@ -325,7 +306,6 @@ class Scene:
         scene represents a node."""
 
         # use the history moving average
-        trail_grid_avg = np.mean(self.trail_grid_history, axis=0)
         mask_grid_sum = np.any(self.mask_grid_history, axis=0).astype(int)
 
         adjacency_list = np.full((len(self.c.all_coordinates_unscaled), 4), -1, dtype=int)
@@ -338,13 +318,6 @@ class Scene:
             scaled_coord = self.c.all_coordinates_scaled[i]
 
             agent_patch = mask_grid_sum[
-                scaled_coord[0] - self.c.wall_height // 2 :
-                scaled_coord[0] + self.c.wall_height // 2 + 1,
-                scaled_coord[1] - self.c.wall_width // 2 :
-                scaled_coord[1] + self.c.wall_width // 2 + 1
-            ]
-
-            trail_patch = trail_grid_avg[
                 scaled_coord[0] - self.c.wall_height // 2 :
                 scaled_coord[0] + self.c.wall_height // 2 + 1,
                 scaled_coord[1] - self.c.wall_width // 2 :
@@ -368,7 +341,7 @@ class Scene:
                 adjacent_nodes = self.get_all_adjacents(unscaled_coord)
                 # determine which adjacencies are actually covered
                 # by the patch, and filter the rest out
-                covered_by_patch = self.verify_adjacents(trail_patch, agent_patch)
+                covered_by_patch = self.verify_adjacents(agent_patch)
                 adjacent_nodes[~covered_by_patch] = -1
 
                 adjacency_list[i] = adjacent_nodes
