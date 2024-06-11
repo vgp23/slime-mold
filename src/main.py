@@ -104,30 +104,16 @@ class Config:
         self.all_coordinates_scaled = coordinates
 
 
-def wait_for_spacebar():
-    while True:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                return True
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:
-                    return True
-
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    return False
-
-
-def check_keypresses(c):
+def check_keypresses(c, pause):
     """Check if the user tries to close the program."""
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            return True
+            return True, pause
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_q:
-                return True
+                return True, pause
             if event.key == pygame.K_SPACE:
-                return wait_for_spacebar()
+                return False, not pause
 
             if event.key == pygame.K_h:
                 c.display_history = not c.display_history
@@ -144,7 +130,7 @@ def check_keypresses(c):
             if event.key == pygame.K_g:
                 c.display_graph = not c.display_graph
 
-    return False
+    return False, pause
 
 
 def scene_update(i, limit):
@@ -207,22 +193,28 @@ def run_with_gui(c, num_iter=np.inf):
     screen = pygame.display.set_mode(c.upscale * np.array([c.width, c.height]))
 
     scene = Scene(c)
+    pause = False
 
     i = 0
-    while i < num_iter:
-        scene.step()
+    while True:
+        if not pause:
+            i += 1
+            scene.step()
+
         draw(scene, screen, font, i)
 
-        if check_keypresses(c):
+        stop, pause = check_keypresses(c, pause)
+        if stop:
             pygame.quit()
             return scene
-
-        i += 1
 
     while True:
-        if check_keypresses():
+        stop, pause = check_keypresses(c, pause)
+        if stop:
             pygame.quit()
             return scene
+
+        draw(scene, screen, font, i)
 
 def run_headless(c, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
