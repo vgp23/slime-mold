@@ -10,7 +10,7 @@ import copy
 
 class Config:
 
-    def __init__(self, seed=np.random.random()):
+    def __init__(self, seed=None):
         self.wall_num_height = 5
         self.wall_num_width = 5
 
@@ -83,7 +83,7 @@ class Config:
         # assume a wall and empty space to each have a width of 1,
         # sample from the empty spaces to get food locations, and
         # scale these coordinates up according to the actual dimensions.
-        # np.random.seed(seed)
+        if seed is not None: np.random.seed(seed)
         X, Y = np.meshgrid(np.arange(self.wall_num_width * 2 + 1), np.arange(self.wall_num_height * 2 + 1))
         coordinates = np.vstack((Y.flatten(), X.flatten())).T  # [(y, x)]
         mask = ~((coordinates[:, 0] % 2 != 0) & (coordinates[:, 1] % 2 != 0))  # filter out wall coordinates
@@ -204,7 +204,7 @@ def run_with_gui(c, num_iter=np.inf):
         draw(scene, screen, font, i)
 
         stop, pause = check_keypresses(c, pause)
-        if stop:
+        if stop or i >= num_iter:
             pygame.quit()
             return scene
 
@@ -227,22 +227,16 @@ def run_headless(c, num_iter=20000):
     return scenes
 
 
-def calculate_metrics(adjacency_list):
-    '''Computes '''
-    pass
-
-
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    c = Config(seed=37)
+    c = Config(37)
     # run an experiment with gui
     # t0 = time.time()
-    scene = run_with_gui(c, num_iter=10000)
+    scene = run_with_gui(c, num_iter=1000)
     # print(time.time() - t0)
 
     # run an experiment headless
     # t0 = time.time()
-    # scenes = run_headless(c, num_iter=10)
+    # scenes = run_headless(c, num_iter=1000)
     # print(time.time() - t0)
     # visualise(scenes, c)
-    # print(scenes[0].trail_grid)
