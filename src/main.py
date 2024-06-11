@@ -59,8 +59,10 @@ class Config:
         self.display_trail = True
         self.display_agents = True
         self.display_food = True
+        self.display_walls = True
+        self.display_history = True
         # objective function visualization diagnostics
-        self.display_objective_results = True
+        self.display_graph = True
 
         # objective function parameters
         self.triangle_agent_cutoff = 2
@@ -116,7 +118,7 @@ def wait_for_spacebar():
                     return False
 
 
-def check_interrupt():
+def check_keypresses(c):
     """Check if the user tries to close the program."""
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
@@ -124,11 +126,23 @@ def check_interrupt():
         if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_q:
                 return True
-
-        # hacky way of pauzing the animation
-        if event.type == pygame.KEYDOWN:
             if event.key == pygame.K_SPACE:
                 return wait_for_spacebar()
+
+            if event.key == pygame.K_h:
+                c.display_history = not c.display_history
+            if event.key == pygame.K_c:
+                c.display_chemo = not c.display_chemo
+            if event.key == pygame.K_t:
+                c.display_trail = not c.display_trail
+            if event.key == pygame.K_a:
+                c.display_agents = not c.display_agents
+            if event.key == pygame.K_f:
+                c.display_food = not c.display_food
+            if event.key == pygame.K_w:
+                c.display_walls = not c.display_walls
+            if event.key == pygame.K_g:
+                c.display_graph = not c.display_graph
 
     return False
 
@@ -199,14 +213,14 @@ def run_with_gui(c, num_iter=np.inf):
         scene.step()
         draw(scene, screen, font, i)
 
-        if check_interrupt():
+        if check_keypresses(c):
             pygame.quit()
             return scene
 
         i += 1
 
     while True:
-        if check_interrupt():
+        if check_keypresses():
             pygame.quit()
             return scene
 
@@ -220,8 +234,10 @@ def run_headless(c, num_iter=20000):
 
     return scenes
 
+
 def calculate_metrics(adjacency_list):
     '''Computes '''
+    pass
 
 
 if __name__ == '__main__':

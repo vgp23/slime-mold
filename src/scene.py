@@ -392,15 +392,20 @@ class Scene:
 
         # diagnostics, shows a green pixel in patches considered "filled", and shows
         # green "arms" in directions of valid edges
-        if self.c.display_objective_results:
+        if self.c.display_graph:
             adjacency_list, patches_filled = self.get_graph()
             idx_filled_patches = np.argwhere(patches_filled)
             filled_patch_coords = np.squeeze(self.c.all_coordinates_scaled[idx_filled_patches])
 
-        mask_grid_sum = np.any(self.mask_grid_history, axis=0).astype(int)
-        # agent_colormap = (1 - (mask_grid_sum | self.wall_mask)) * 255  # show history
-        agent_colormap = ((1 - ((self.agent_grid != None) | self.wall_mask)) * 255)  # show current state
-        # agent_colormap = ((1 - (self.agent_grid != None)) * 255)  # dont show walls
+        if self.c.display_history:
+            mask_grid = np.any(self.mask_grid_history, axis=0).astype(int)
+        else:
+            mask_grid = self.agent_grid != None
+
+        if self.c.display_walls:
+            agent_colormap = (1 - (mask_grid | self.wall_mask)) * 255
+        else:
+            agent_colormap = (1 - mask_grid) * 255
 
         # create colormap for trails and food source, blue and red respectively
         # upscale trail and chemo maps
@@ -459,7 +464,7 @@ class Scene:
             green_channel = green_channel * not_food_pixels + np.zeros_like(green_channel) * food_pixels
             blue_channel = blue_channel * not_food_pixels + np.zeros_like(blue_channel) * food_pixels
 
-        if self.c.display_objective_results:
+        if self.c.display_graph:
             # place a green pixel at the center of each filled patch
             red_channel[filled_patch_coords[:,0], filled_patch_coords[:,1]] = 0
             blue_channel[filled_patch_coords[:,0], filled_patch_coords[:,1]] = 0
