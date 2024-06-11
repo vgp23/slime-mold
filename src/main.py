@@ -41,7 +41,7 @@ class Config:
         self.elimination_threshold = -10
 
         # penalty for being far from food
-        self.starvation_penalty = 0.9
+        self.starvation_penalty = 0.5
         self.starvation_threshold = 0.1
 
         # food pickup
@@ -196,7 +196,6 @@ def run_with_gui(c, num_iter=np.inf):
         if not pause:
             i += 1
             scene.step()
-            print(scene.graph().fullyconnected())
 
         draw(scene, screen, font, i)
 
@@ -213,6 +212,7 @@ def run_with_gui(c, num_iter=np.inf):
 
         draw(scene, screen, font, i)
 
+
 def run_headless(c, num_iter=20000):
     """Run simulations headless on the gpu without gui."""
     scenes = [Scene(c)]
@@ -226,7 +226,7 @@ def run_headless(c, num_iter=20000):
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    c = Config(seed=38)
+    c = Config()
     # run an experiment with gui
     # t0 = time.time()
     scene = run_with_gui(c, num_iter=np.inf)

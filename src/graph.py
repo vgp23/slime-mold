@@ -98,3 +98,13 @@ class Graph:
             foods_in.append(min_food)
 
         return total_size
+
+
+    def fault_tolerance(self):
+        # check percentage of (part) edges that disconnect any of the food sources
+        pass
+
+
+    def mst_actual(self):
+        # MST on the actual graph
+        pass
