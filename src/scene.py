@@ -33,7 +33,7 @@ class Scene:
                 food[0]:food[0] + c.food_size, food[1]:food[1] + c.food_size
             ] = c.food_deposit
 
-        self.food_grid = self.chemo_grid > 0  # food sources mask grid
+        self.food_sources_grid = self.chemo_grid > 0  # food sources mask grid
 
         # boolean grid, used to account for possibility that agent is moved to a
         # grid position that has not yet been iterated over, leading to an agent
@@ -215,9 +215,9 @@ class Scene:
         self.chemo_grid = self.chemo_grid * (1 - self.wall_mask.astype(int))  # clip out diffusion into walls
 
         # reset the values in the food sources to the default
-        not_food_grid = self.food_grid == 0
+        not_food_grid = self.food_sources_grid == 0
         self.chemo_grid = np.multiply(not_food_grid, self.chemo_grid) + \
-            self.food_grid * self.c.food_deposit
+            self.food_sources_grid * self.c.food_deposit
 
         # trail grid
         trail_kernel = np.ones(
@@ -374,7 +374,7 @@ class Scene:
         # upscale trail and chemo maps
         trail_colormap = np.copy(self.trail_grid)
         chemo_colormap = np.copy(self.chemo_grid)
-        food_colormap  = np.copy(self.food_grid)
+        food_sources_colormap  = np.copy(self.food_sources_grid)
 
         # To achieve the desired color,the target color channel is set to 255,
         # and the other two are *decreased* in proportion to the value in the
@@ -420,12 +420,12 @@ class Scene:
 
         if self.c.display_food:
             # placing food sources on top of everything
-            food_pixels = food_colormap > 0
-            not_food_pixels = food_colormap == 0
+            food_sources_pixels = food_sources_colormap > 0
+            not_food_sources_pixels = food_sources_colormap == 0
 
-            red_channel = red_channel * not_food_pixels + np.full_like(red_channel, 255) * food_pixels
-            green_channel = green_channel * not_food_pixels + np.zeros_like(green_channel) * food_pixels
-            blue_channel = blue_channel * not_food_pixels + np.zeros_like(blue_channel) * food_pixels
+            red_channel = red_channel * not_food_sources_pixels + np.full_like(red_channel, 255) * food_sources_pixels
+            green_channel = green_channel * not_food_sources_pixels + np.zeros_like(green_channel) * food_sources_pixels
+            blue_channel = blue_channel * not_food_sources_pixels + np.zeros_like(blue_channel) * food_sources_pixels
 
         if self.c.display_graph:
             # diagnostics, shows a green pixel in patches considered "filled", and shows
