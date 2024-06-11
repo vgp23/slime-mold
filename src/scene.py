@@ -217,7 +217,7 @@ class Scene:
         # reset the values in the food sources to the default
         not_food_grid = self.food_grid == 0
         self.chemo_grid = np.multiply(not_food_grid, self.chemo_grid) + \
-            self.food_grid * self.c.chemo_deposit
+            self.food_grid * self.c.food_deposit
 
         # trail grid
         trail_kernel = np.ones(

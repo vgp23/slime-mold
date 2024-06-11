@@ -28,7 +28,6 @@ class Config:
         self.trail_filter_size = 3
         self.trail_weight = 0.1
 
-        self.chemo_deposit = 10
         self.chemo_damping = 0.1
         self.chemo_filter_size = 3
         self.chemo_weight = 1 - self.trail_weight
@@ -43,8 +42,8 @@ class Config:
 
         # food source settings
         self.food_deposit = 10
-        self.food_amount = 8
         self.food_size = 3
+        self.num_food = 3
 
         # food pickup
         self.food_pickup_threshold = 1
@@ -90,7 +89,7 @@ class Config:
         coordinates = coordinates[mask]
 
         # sample food coordinates and scale accordingly
-        food_choices = np.random.choice(range(len(coordinates)), size=(self.food_amount,), replace=False)
+        food_choices = np.random.choice(range(len(coordinates)), size=(self.num_food,), replace=False)
         food_coordinates = coordinates[food_choices]
         self.foods_unscaled = copy.deepcopy(food_coordinates)
         food_coordinates[:, 0] = food_coordinates[:, 0] * self.wall_height + self.wall_height // 2 - self.food_size // 2
