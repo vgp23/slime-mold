@@ -28,9 +28,13 @@ class Config:
         self.trail_filter_size = 3
         self.trail_weight = 0.1
 
-        self.chemo_damping = 0.1
-        self.chemo_filter_size = 3
-        self.chemo_weight = 1 - self.trail_weight
+        # food source settings
+        self.food_deposit = 10
+        self.food_damping = 0.1
+        self.food_filter_size = 3
+        self.food_weight = 1 - self.trail_weight
+        self.food_size = 3
+        self.num_food = 3
 
         self.sensor_length = 4 # DECREASED
         self.reproduction_threshold = 15
@@ -39,11 +43,6 @@ class Config:
         # penalty for being far from food
         self.starvation_penalty = 0.7
         self.starvation_threshold = 0.1
-
-        # food source settings
-        self.food_deposit = 10
-        self.food_size = 3
-        self.num_food = 3
 
         # food pickup
         self.food_pickup_threshold = 1
@@ -54,10 +53,10 @@ class Config:
         self.food_drop_amount = 0.3
 
         # visualization settings
-        self.display_chemo = False
+        self.display_food = False
         self.display_trail = True
         self.display_agents = True
-        self.display_food = True
+        self.display_food_sources = True
         self.display_walls = True
         self.display_history = True
         # objective function visualization diagnostics
@@ -118,13 +117,13 @@ def check_keypresses(c, pause):
             if event.key == pygame.K_h:
                 c.display_history = not c.display_history
             if event.key == pygame.K_c:
-                c.display_chemo = not c.display_chemo
+                c.display_food = not c.display_food
             if event.key == pygame.K_t:
                 c.display_trail = not c.display_trail
             if event.key == pygame.K_a:
                 c.display_agents = not c.display_agents
             if event.key == pygame.K_f:
-                c.display_food = not c.display_food
+                c.display_food_sources = not c.display_food_sources
             if event.key == pygame.K_w:
                 c.display_walls = not c.display_walls
             if event.key == pygame.K_g:
@@ -232,7 +231,7 @@ if __name__ == '__main__':
     c = Config()
     # run an experiment with gui
     # t0 = time.time()
-    # scene = run_with_gui(c, num_iter=np.inf)
+    scene = run_with_gui(c, num_iter=np.inf)
     # print(time.time() - t0)
 
     # run an experiment headless

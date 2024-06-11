@@ -27,13 +27,13 @@ class Scene:
 
         # Contains chemo-nutrient/food data. Also need a binary mask of the initial
         # chemo grid, to keep food source values constant across iterations.
-        self.chemo_grid = np.zeros((c.height, c.width))
+        self.food_grid = np.zeros((c.height, c.width))
         for food in c.foods:
-            self.chemo_grid[
+            self.food_grid[
                 food[0]:food[0] + c.food_size, food[1]:food[1] + c.food_size
             ] = c.food_deposit
 
-        self.food_sources_grid = self.chemo_grid > 0  # food sources mask grid
+        self.food_sources_grid = self.food_grid > 0  # food sources mask grid
 
         # boolean grid, used to account for possibility that agent is moved to a
         # grid position that has not yet been iterated over, leading to an agent
@@ -75,7 +75,7 @@ class Scene:
         def sensor_value(coord):
             value = -np.inf
             if not self.out_of_bounds(coord):
-                value = self.c.chemo_weight * self.chemo_grid[coord.y, coord.x] + \
+                value = self.c.food_weight * self.food_grid[coord.y, coord.x] + \
                         self.c.trail_weight * self.trail_grid[coord.y, coord.x]
             return value
 
@@ -141,16 +141,16 @@ class Scene:
         agent = self.agent_grid[coordinate.y, coordinate.x]
 
         # penalty for being far from food, die earlier
-        if self.chemo_grid[coordinate.y, coordinate.x] < self.c.starvation_threshold:
+        if self.food_grid[coordinate.y, coordinate.x] < self.c.starvation_threshold:
             agent.counter -= self.c.starvation_penalty
 
         # pickup food when we can
-        if self.chemo_grid[coordinate.y, coordinate.x] > self.c.food_pickup_threshold:
+        if self.food_grid[coordinate.y, coordinate.x] > self.c.food_pickup_threshold:
             agent.food += self.c.food_pickup_amount
             agent.food = max(agent.food, self.c.food_pickup_limit)
         # drop food
         if agent.food > self.c.food_drop_amount:
-            self.chemo_grid[coordinate.y, coordinate.x] += self.c.food_drop_amount
+            self.food_grid[coordinate.y, coordinate.x] += self.c.food_drop_amount
             agent.food -= self.c.food_drop_amount
 
         # If the elimination trigger is met, remove agent.
@@ -205,18 +205,18 @@ class Scene:
         agents have been updated + rotated."""
 
         # chemo grid
-        chemo_kernel = np.ones(
-            (self.c.chemo_filter_size, self.c.chemo_filter_size)
-        ) * (1 / self.c.chemo_filter_size**2)
+        food_kernel = np.ones(
+            (self.c.food_filter_size, self.c.food_filter_size)
+        ) * (1 / self.c.food_filter_size**2)
 
-        self.chemo_grid = scipy.signal.convolve2d(self.chemo_grid, chemo_kernel, mode='same')
-        self.chemo_grid = self.chemo_grid * (1 - self.c.chemo_damping)
+        self.food_grid = scipy.signal.convolve2d(self.food_grid, food_kernel, mode='same')
+        self.food_grid = self.food_grid * (1 - self.c.food_damping)
 
-        self.chemo_grid = self.chemo_grid * (1 - self.wall_mask.astype(int))  # clip out diffusion into walls
+        self.food_grid = self.food_grid * (1 - self.wall_mask.astype(int))  # clip out diffusion into walls
 
         # reset the values in the food sources to the default
         not_food_grid = self.food_sources_grid == 0
-        self.chemo_grid = np.multiply(not_food_grid, self.chemo_grid) + \
+        self.food_grid = np.multiply(not_food_grid, self.food_grid) + \
             self.food_sources_grid * self.c.food_deposit
 
         # trail grid
@@ -373,7 +373,7 @@ class Scene:
         # create colormap for trails and food source, blue and red respectively
         # upscale trail and chemo maps
         trail_colormap = np.copy(self.trail_grid)
-        chemo_colormap = np.copy(self.chemo_grid)
+        food_colormap = np.copy(self.food_grid)
         food_sources_colormap  = np.copy(self.food_sources_grid)
 
         # To achieve the desired color,the target color channel is set to 255,
@@ -384,17 +384,17 @@ class Scene:
         green_channel = np.full_like(agent_colormap, 255)
         blue_channel = np.full_like(agent_colormap, 255)
 
-        if self.c.display_chemo:
+        if self.c.display_food:
             # TODO make chemo spreading visual when trails are also visible
             # intensity transformation, strictly for visual purposes
             # clipping the map back to [0, 255]
             intensity = 100
-            chemo_colormap = np.minimum(intensity * chemo_colormap, 255)
-            chemo_colormap = np.full_like(chemo_colormap, 255) - chemo_colormap # inverting the map
+            food_colormap = np.minimum(intensity * food_colormap, 255)
+            food_colormap = np.full_like(food_colormap, 255) - food_colormap # inverting the map
 
-            red_channel = np.full_like(chemo_colormap, 255)
-            green_channel = chemo_colormap
-            blue_channel = np.copy(chemo_colormap)
+            red_channel = np.full_like(food_colormap, 255)
+            green_channel = food_colormap
+            blue_channel = np.copy(food_colormap)
 
         if self.c.display_trail:
             # intensity transformation, strictly for visual purposes
@@ -418,7 +418,7 @@ class Scene:
             green_channel = green_channel * not_agent_pixels + agent_colormap * agent_pixels
             blue_channel = blue_channel * not_agent_pixels + agent_colormap * agent_pixels
 
-        if self.c.display_food:
+        if self.c.display_food_sources:
             # placing food sources on top of everything
             food_sources_pixels = food_sources_colormap > 0
             not_food_sources_pixels = food_sources_colormap == 0
