@@ -41,7 +41,7 @@ class Config:
         self.elimination_threshold = -10
 
         # penalty for being far from food
-        self.starvation_penalty = 0.5
+        self.starvation_penalty = 0.9
         self.starvation_threshold = 0.1
 
         # food pickup
@@ -196,6 +196,7 @@ def run_with_gui(c, num_iter=np.inf):
         if not pause:
             i += 1
             scene.step()
+            print(scene.graph().fullyconnected())
 
         draw(scene, screen, font, i)
 
@@ -235,5 +236,4 @@ if __name__ == '__main__':
     # t0 = time.time()
     # scenes = run_headless(c, num_iter=10)
     # print(time.time() - t0)
-    # print(scenes[0].graph().mst())
     # visualise(scenes, c)

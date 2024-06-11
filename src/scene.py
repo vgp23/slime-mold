@@ -431,7 +431,7 @@ class Scene:
             # diagnostics, shows a green pixel in patches considered "filled", and shows
             # green "arms" in directions of valid edges
             graph = self.graph()
-            patches_filled = graph.nodes
+            patches_filled = graph.mask
             adjacency_list = graph.adj
 
             idx_filled_patches = np.argwhere(patches_filled)
