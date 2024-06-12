@@ -68,6 +68,11 @@ class Config:
         # generate food
         self.foods_unscaled, self.foods = self.generate_foods(seed)
 
+        # handle user provided settings
+        self.handle_user_params(kwargs)
+
+
+    def handle_user_params(self, kwargs):
         # set user provided settings
         for key, value in kwargs.items():
             setattr(self, key, value)
@@ -104,14 +109,6 @@ class Config:
         return coordinates, self.scale_coordinates(coordinates)
 
 
-    def generate_food_setup(self):
-        """Generate a possible setup for food sources"""
-        food_choices = np.random.choice(
-            range(len(self.all_coordinates_unscaled)), size=(self.num_food,), replace=False
-        )
-        return self.all_coordinates_unscaled[food_choices]
-
-
     def food_setup_spanning(self, food_coordinates):
         """Given a setup for food sources, determine whether the minimum height
         and width span percentage are met."""
@@ -128,6 +125,14 @@ class Config:
             (max_x_span >= self.food_span * (self.wall_num_width * 2 + 1)) and
             (max_y_span >= self.food_span * (self.wall_num_height * 2 + 1))
         )
+
+
+    def generate_food_setup(self):
+        """Generate a possible setup for food sources"""
+        food_choices = np.random.choice(
+            range(len(self.all_coordinates_unscaled)), size=(self.num_food,), replace=False
+        )
+        return self.all_coordinates_unscaled[food_choices]
 
 
     def generate_foods(self, seed):

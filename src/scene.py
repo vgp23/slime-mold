@@ -412,15 +412,6 @@ class Scene:
             green_channel = green_channel * not_agent_pixels + agent_colormap * agent_pixels
             blue_channel = blue_channel * not_agent_pixels + agent_colormap * agent_pixels
 
-        if self.c.display_food_sources:
-            # placing food sources on top of everything
-            food_sources_pixels = food_sources_colormap > 0
-            not_food_sources_pixels = food_sources_colormap == 0
-
-            red_channel = red_channel * not_food_sources_pixels + np.full_like(red_channel, 255) * food_sources_pixels
-            green_channel = green_channel * not_food_sources_pixels + np.zeros_like(green_channel) * food_sources_pixels
-            blue_channel = blue_channel * not_food_sources_pixels + np.zeros_like(blue_channel) * food_sources_pixels
-
         if self.c.display_graph:
             # diagnostics, shows a green pixel in patches considered "filled", and shows
             # green "arms" in directions of valid edges
@@ -459,6 +450,15 @@ class Scene:
                         red_channel[coord[0], coord[1]-1-self.c.wall_width//2:coord[1]] = 0
                         blue_channel[coord[0], coord[1]-1-self.c.wall_width//2:coord[1]] = 0
                         green_channel[coord[0], coord[1]-1-self.c.wall_width//2:coord[1]] = 255
+
+        if self.c.display_food_sources:
+            # placing food sources on top of everything
+            food_sources_pixels = food_sources_colormap > 0
+            not_food_sources_pixels = food_sources_colormap == 0
+
+            red_channel = red_channel * not_food_sources_pixels + np.full_like(red_channel, 255) * food_sources_pixels
+            green_channel = green_channel * not_food_sources_pixels + np.zeros_like(green_channel) * food_sources_pixels
+            blue_channel = blue_channel * not_food_sources_pixels + np.zeros_like(blue_channel) * food_sources_pixels
 
         pixelmap = np.stack(
             (red_channel.astype(np.uint8), green_channel.astype(np.uint8), blue_channel.astype(np.uint8)),

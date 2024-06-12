@@ -8,6 +8,7 @@ import collections
 import pygame
 import time
 import copy
+import jsonpickle
 
 
 def check_keypresses(c, pause):
@@ -187,7 +188,6 @@ def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, n
 
             for _ in range(food_setup_repetitions):
                 results = run_repeated(configs, num_iter)
-                # TODO save results
 
 
 if __name__ == '__main__':
@@ -196,12 +196,13 @@ if __name__ == '__main__':
 
     # run an experiment with gui
     # t0 = time.time()
-    # scene = run_with_gui(c)
+    scene = run_with_gui(c)
     # print(time.time() - t0)
 
     # run an experiment headless
     # t0 = time.time()
     # scenes = run_headless(c, num_iter=10)
+    # print(jsonpickle.encode(scenes[-1]))
     # print(time.time() - t0)
     # visualise(scenes, c)
 
