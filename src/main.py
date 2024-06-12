@@ -192,14 +192,11 @@ def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, n
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    # c = Config()
+    c = Config()
 
     # run an experiment with gui
     # t0 = time.time()
-    food_seeds = list(range(mp.cpu_count() - 2))
-    for seed in food_seeds:
-        c = Config(seed)
-        scene = run_with_gui(c)
+    # scene = run_with_gui(c)
     # print(time.time() - t0)
 
     # run an experiment headless

@@ -4,7 +4,7 @@ import copy
 
 class Config:
 
-    def __init__(self, seed=None):
+    def __init__(self, seed=None, **kwargs):
         # gui
         self.upscale = 5
         self.display_food_sources = True
@@ -67,6 +67,16 @@ class Config:
 
         # generate food
         self.foods_unscaled, self.foods = self.generate_foods(seed)
+
+        # set user provided settings
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+            # handle exceptions
+            if key == 'food_deposit':
+                self.food_pickup_limit = self.food_deposit
+            if key == 'trail_weight':
+                self.food_weight = 1 - self.trail_weight
 
 
     def scale_food_coordinates(self, coordinates):
