@@ -9,11 +9,11 @@ class Config:
         self.upscale = 5
         self.display_food_sources = True
         self.display_food = False
-        self.display_trail = False
-        self.display_agents = False
+        self.display_trail = True
+        self.display_agents = True
         self.display_walls = True
         self.display_history = False
-        self.display_graph = False
+        self.display_graph = True
 
         # walls
         self.wall_num_height = 5
@@ -127,9 +127,9 @@ class Config:
         )
 
 
-    def generate_food_setup(self):
+    def generate_food_setup(self, rng):
         """Generate a possible setup for food sources"""
-        food_choices = np.random.choice(
+        food_choices = rng.choice(
             range(len(self.all_coordinates_unscaled)), size=(self.num_food,), replace=False
         )
         return self.all_coordinates_unscaled[food_choices]
@@ -142,13 +142,13 @@ class Config:
             self.food_size % 2 == 1 and self.wall_height % 2 == 1 and self.wall_width % 2 == 1
         ), "both food and wall needs to be odd/even"
 
-        np.random.seed(seed)
+        rng = np.random.default_rng(seed)
 
         # generate food coordinates, until we got a setup that spans the
         # requirement amount of the scene
-        food_coordinates = self.generate_food_setup()
+        food_coordinates = self.generate_food_setup(rng)
         while not self.food_setup_spanning(food_coordinates):
-            food_coordinates = self.generate_food_setup()
+            food_coordinates = self.generate_food_setup(rng)
 
         # save scaled and unscaled coordinates
         foods_unscaled = copy.deepcopy(food_coordinates)

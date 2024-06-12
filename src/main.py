@@ -5,10 +5,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import multiprocessing as mp
 import collections
-import pygame
 import time
 import copy
+import pathlib
 import jsonpickle
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "hide"
+import pygame
 
 
 def check_keypresses(c, pause):
@@ -73,8 +76,9 @@ def draw(scene, screen, font, i=None):
     pygame.display.update()
 
 
-def visualise(scenes, c, i=None):
+def visualise(scenes, c=None, i=None):
     """Visualise a single scene for inspection."""
+    if c is None: c = scenes[0].c
     pygame.init()
 
     font = pygame.font.Font(None, 48)
@@ -112,9 +116,12 @@ def run_with_gui(c, num_iter=np.inf):
         draw(scene, screen, font, i)
         stop, pause = check_keypresses(c, pause)
 
-        if stop or i >= num_iter:
+        if stop:
             pygame.quit()
             return scene
+
+        if i >= num_iter:
+            break
 
     # wait at the last scene
     while True:
@@ -139,27 +146,23 @@ def run_headless(c, num_iter, process_id=None, results=None):
 
 def run_headless_concurrent(c, num_iter, process_id, results):
     """Run simulations headless without gui concurrently."""
-    np.random.seed(process_id)
+    np.random.seed()  # make sure the forks use different seeds
     scene = Scene(c)
 
     for _ in range(num_iter - 1):
         scene.step()
 
-    if process_id is not None:
-        print(f'process {process_id} finished')
-        results['scenes'][process_id] = scene
-        return
+    results[process_id] = scene
 
 
 def run_repeated(configs, num_iter, repetitions=mp.cpu_count()):
-    # use the same config for all if only one is given
+    """Run all the given configs concurrently on the cpu."""
+    # use the same config for all repetitions if only one is given
     if not isinstance(configs, list):
         configs = [configs for _ in range(repetitions)]
 
     manager = mp.Manager()
-    results = manager.dict()
-
-    results['scenes'] = manager.dict()
+    results = manager.list([None for _ in range(len(configs))])
     jobs = []
 
     for process_id, config in enumerate(configs):
@@ -172,37 +175,57 @@ def run_repeated(configs, num_iter, repetitions=mp.cpu_count()):
     for process in jobs:
         process.join()
 
-    return results['scenes'].values()
+    return list(results)
 
 
 def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, num_iter):
-    food_seeds = list(range(num_food_setups))
+    """Run the given experiments and save the results to files."""
 
-    for parameter_name, parameter_values in parameter_setups.items:
+    for parameter_name, parameter_values in parameter_setups.items():
+        # create a directory to save the results
+        dirname = f'../results/{parameter_name}'
+        pathlib.Path(dirname).mkdir(parents=True, exist_ok=True)
+
+        print()
+
         for parameter_value in parameter_values:
+            print(f'set {parameter_name} = {parameter_value}')
 
+            # generate a config for each food setup and change the parameter in
+            # the config that we are varying in this run
             configs = [
-                Config(food_seed, parameter_name=parameter_value)
-                for food_seed in food_seeds
+                Config(seed=food_seed, **{parameter_name: parameter_value})
+                for food_seed in list(range(num_food_setups))
             ]
 
-            for _ in range(food_setup_repetitions):
-                results = run_repeated(configs, num_iter)
+            # run all food setups a few times
+            results = []
+            for i in range(food_setup_repetitions):
+                print(f'repetition {i + 1}...', end='')
+                results.append(run_repeated(configs, num_iter))
+                print(f'done')
+
+            # save the results to a file
+            filename = f'{dirname}/{parameter_value}'
+            with open(filename, 'w') as f:
+                f.write(jsonpickle.encode(results))
+                print(f'saved to {filename}')
+
+            print()
 
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    c = Config()
+    # c = Config(seed=0, reproduction_threshold=50)
 
     # run an experiment with gui
     # t0 = time.time()
-    scene = run_with_gui(c)
+    # scene = run_with_gui(c, num_iter=300)
     # print(time.time() - t0)
 
     # run an experiment headless
     # t0 = time.time()
     # scenes = run_headless(c, num_iter=10)
-    # print(jsonpickle.encode(scenes[-1]))
     # print(time.time() - t0)
     # visualise(scenes, c)
 
@@ -214,5 +237,4 @@ if __name__ == '__main__':
         'starvation_penalty': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
         'food_drop_amount': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
     }
-    # run_experiments(configs, mp.cpu_count() - 2, 5, 1000)
-
+    run_experiments(parameter_setups, mp.cpu_count() - 2, 5, 1000)

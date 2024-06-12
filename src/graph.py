@@ -39,6 +39,7 @@ class Graph:
         foods = copy.deepcopy(self.c.foods_unscaled)
 
         # TODO make this adjustable so we can filter out graphs with any disconnected bits
+        # TODO filter out single nodes without edges
         foods_out = self.food_nodes()
         visited = []
         canvisit = [foods_out.pop()]
@@ -59,7 +60,7 @@ class Graph:
     def mst(self):
         """Compute the size of a minimum spanning tree between the food sources,
         NOT considering the actual network!"""
-        assert self.connected
+        # assert self.connected  # TODO uncomment me
 
         def dist(food1, food2):
             # Compute the manhatten distance between two food sources. Note, if

@@ -5,7 +5,6 @@ import scipy
 import copy
 import time
 from vector import Vector2D
-import pygame
 
 class Scene:
 
