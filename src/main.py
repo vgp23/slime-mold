@@ -126,32 +126,45 @@ def run_with_gui(c, num_iter=np.inf):
 
 
 def run_headless(c, num_iter, process_id=None, results=None):
-    """Run simulations headless on the gpu without gui."""
+    """Run simulations headless without gui."""
     scenes = [Scene(c)]
 
     for _ in range(num_iter - 1):
         scenes[-1].step()
         scenes.append(copy.deepcopy(scenes[-1]))
 
-    if process_id is not None:
-        results['scenes'][process_id] = scenes
-        return
-
     return scenes
 
 
-def run_repeated(c, num_iter, repetitions=mp.cpu_count()):
+def run_headless_concurrent(c, num_iter, process_id, results):
+    """Run simulations headless without gui concurrently."""
+    np.random.seed(process_id)
+    scene = Scene(c)
+
+    for _ in range(num_iter - 1):
+        scene.step()
+
+    if process_id is not None:
+        print(f'process {process_id} finished')
+        results['scenes'][process_id] = scene
+        return
+
+
+def run_repeated(configs, num_iter, repetitions=mp.cpu_count()):
+    # use the same config for all if only one is given
+    if not isinstance(configs, list):
+        configs = [configs for _ in range(repetitions)]
+
     manager = mp.Manager()
     results = manager.dict()
 
     results['scenes'] = manager.dict()
-
     jobs = []
 
-    for process_id in range(repetitions):
+    for process_id, config in enumerate(configs):
         jobs.append(mp.Process(
-            target=run_headless,
-            args=(c, num_iter, process_id, results)
+            target=run_headless_concurrent,
+            args=(config, num_iter, process_id, results)
         ))
         jobs[-1].start()
 
@@ -161,12 +174,32 @@ def run_repeated(c, num_iter, repetitions=mp.cpu_count()):
     return results['scenes'].values()
 
 
+def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, num_iter):
+    food_seeds = list(range(num_food_setups))
+
+    for parameter_name, parameter_values in parameter_setups.items:
+        for parameter_value in parameter_values:
+
+            configs = [
+                Config(food_seed, parameter_name=parameter_value)
+                for food_seed in food_seeds
+            ]
+
+            for _ in range(food_setup_repetitions):
+                results = run_repeated(configs, num_iter)
+                # TODO save results
+
+
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    c = Config()
+    # c = Config()
+
     # run an experiment with gui
     # t0 = time.time()
-    scene = run_with_gui(c)
+    food_seeds = list(range(mp.cpu_count() - 2))
+    for seed in food_seeds:
+        c = Config(seed)
+        scene = run_with_gui(c)
     # print(time.time() - t0)
 
     # run an experiment headless
@@ -175,6 +208,13 @@ if __name__ == '__main__':
     # print(time.time() - t0)
     # visualise(scenes, c)
 
-    # sceness = run_repeated(c, num_iter=10)
-    # print(sceness)
-    # print(len(sceness), len(sceness[0]))
+    parameter_setups = {
+        'initial_population_density': [0.01, 0.04, 0.07, 0.1, 0.3, 0.5],
+        'reproduction_threshold': [10, 15, 20, 25, 30, 35],
+        'elimination_threshold': [-5, -10, -15, -20, -25, -30],
+        'trail_weight': [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
+        'starvation_penalty': [0.3, 0.4, 0.5, 0.6, 0.7, 0.8],
+        'food_drop_amount': [0.0, 0.1, 0.2, 0.3, 0.4, 0.5],
+    }
+    # run_experiments(configs, mp.cpu_count() - 2, 5, 1000)
+

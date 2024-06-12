@@ -5,17 +5,15 @@ import copy
 class Config:
 
     def __init__(self, seed=None):
-        if seed is not None: np.random.seed(seed)
-
         # gui
-        self.upscale = 9
-        self.display_food = False
-        self.display_trail = True
-        self.display_agents = True
+        self.upscale = 5
         self.display_food_sources = True
+        self.display_food = False
+        self.display_trail = False
+        self.display_agents = False
         self.display_walls = True
-        self.display_history = True
-        self.display_graph = True
+        self.display_history = False
+        self.display_graph = False
 
         # walls
         self.wall_num_height = 5
@@ -43,7 +41,8 @@ class Config:
 
         # food
         self.food_size = 3
-        self.num_food = 5
+        self.num_food = 8
+        self.food_span = 0.8
         self.food_deposit = 10
         self.food_damping = 0.1
         self.food_filter_size = 3
@@ -61,16 +60,13 @@ class Config:
         # objective function
         self.triangle_agent_cutoff = 2
         self.agent_cutoff = 1
-        self.patch_cutoff = 45
-        self.triangle_cutoff = 30
-        self.patch_edge_cutoff = 20
         self.history_size = 30
 
         # coordinate lists
         self.all_coordinates_unscaled, self.all_coordinates_scaled = self.coordinates()
 
         # generate food
-        self.foods_unscaled, self.foods = self.generate_foods()
+        self.foods_unscaled, self.foods = self.generate_foods(seed)
 
 
     def scale_food_coordinates(self, coordinates):
@@ -98,19 +94,48 @@ class Config:
         return coordinates, self.scale_coordinates(coordinates)
 
 
-    def generate_foods(self):
+    def generate_food_setup(self):
+        """Generate a possible setup for food sources"""
+        food_choices = np.random.choice(
+            range(len(self.all_coordinates_unscaled)), size=(self.num_food,), replace=False
+        )
+        return self.all_coordinates_unscaled[food_choices]
+
+
+    def food_setup_spanning(self, food_coordinates):
+        """Given a setup for food sources, determine whether the minimum height
+        and width span percentage are met."""
+        max_x_span = 0
+        max_y_span = 0
+
+        for coord1 in food_coordinates:
+            for coord2 in food_coordinates:
+                y_diff, x_diff = abs(coord1 - coord2)
+                max_x_span = max(max_x_span, x_diff)
+                max_y_span = max(max_y_span, y_diff)
+
+        return (
+            (max_x_span >= self.food_span * (self.wall_num_width * 2 + 1)) and
+            (max_y_span >= self.food_span * (self.wall_num_height * 2 + 1))
+        )
+
+
+    def generate_foods(self, seed):
         assert (
             self.food_size % 2 == 0 and self.wall_height % 2 == 0 and self.wall_width % 2 == 0
         ) or (
             self.food_size % 2 == 1 and self.wall_height % 2 == 1 and self.wall_width % 2 == 1
         ), "both food and wall needs to be odd/even"
 
-        # sample food source coordinates
-        food_choices = np.random.choice(
-            range(len(self.all_coordinates_unscaled)), size=(self.num_food,), replace=False
-        )
-        food_coordinates = self.all_coordinates_unscaled[food_choices]
+        np.random.seed(seed)
 
+        # generate food coordinates, until we got a setup that spans the
+        # requirement amount of the scene
+        food_coordinates = self.generate_food_setup()
+        while not self.food_setup_spanning(food_coordinates):
+            food_coordinates = self.generate_food_setup()
+
+        # save scaled and unscaled coordinates
         foods_unscaled = copy.deepcopy(food_coordinates)
         foods = self.scale_food_coordinates(food_coordinates)
 

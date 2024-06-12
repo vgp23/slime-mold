@@ -32,7 +32,6 @@ class Scene:
             self.food_grid[
                 food[0]:food[0] + c.food_size, food[1]:food[1] + c.food_size
             ] = c.food_deposit
-
         self.food_sources_grid = self.food_grid > 0  # food sources mask grid
 
         # boolean grid, used to account for possibility that agent is moved to a
@@ -141,13 +140,14 @@ class Scene:
         agent = self.agent_grid[coordinate.y, coordinate.x]
 
         # penalty for being far from food, die earlier
-        if self.food_grid[coordinate.y, coordinate.x] < self.c.starvation_threshold:
+        if self.food_grid[coordinate.y, coordinate.x] <= self.c.starvation_threshold:
             agent.counter -= self.c.starvation_penalty
 
         # pickup food when we can
         if self.food_grid[coordinate.y, coordinate.x] > self.c.food_pickup_threshold:
             agent.food += self.food_grid[coordinate.y, coordinate.x]
             agent.food = min(agent.food, self.c.food_pickup_limit)
+
         # drop food
         if agent.food > self.c.food_drop_amount:
             self.food_grid[coordinate.y, coordinate.x] += self.c.food_drop_amount
@@ -205,13 +205,10 @@ class Scene:
         agents have been updated + rotated."""
 
         # food grid
-        food_kernel = np.ones(
-            (self.c.food_filter_size, self.c.food_filter_size)
-        ) * (1 / self.c.food_filter_size**2)
-
+        food_kernel = np.ones((self.c.food_filter_size, self.c.food_filter_size)) \
+            * (1 / self.c.food_filter_size**2)
         self.food_grid = scipy.signal.convolve2d(self.food_grid, food_kernel, mode='same')
         self.food_grid = self.food_grid * (1 - self.c.food_damping)
-
         self.food_grid = self.food_grid * (1 - self.wall_mask.astype(int))  # clip out diffusion into walls
 
         # reset the values in the food sources to the default
@@ -220,13 +217,10 @@ class Scene:
             self.food_sources_grid * self.c.food_deposit
 
         # trail grid
-        trail_kernel = np.ones(
-            (self.c.trail_filter_size, self.c.trail_filter_size)
-        ) * (1 / self.c.trail_filter_size**2)
-
+        trail_kernel = np.ones((self.c.trail_filter_size, self.c.trail_filter_size)) \
+            * (1 / self.c.trail_filter_size**2)
         self.trail_grid = scipy.signal.convolve2d(self.trail_grid, trail_kernel, mode='same')
         self.trail_grid = self.trail_grid * (1 - self.c.trail_damping)
-
         self.trail_grid = self.trail_grid * (1 - self.wall_mask.astype(int))  # clip out diffusion into walls
 
 
@@ -388,7 +382,7 @@ class Scene:
             # TODO make food spreading visual when trails are also visible
             # intensity transformation, strictly for visual purposes
             # clipping the map back to [0, 255]
-            intensity = 100
+            intensity = 1000
             food_colormap = np.minimum(intensity * food_colormap, 255)
             food_colormap = np.full_like(food_colormap, 255) - food_colormap # inverting the map
 
