@@ -1,103 +1,13 @@
+from config import *
 from agent import *
 from scene import *
 import numpy as np
 import matplotlib.pyplot as plt
+import multiprocessing as mp
 import collections
 import pygame
 import time
 import copy
-
-
-class Config:
-
-    def __init__(self, seed=None):
-        self.wall_num_height = 5
-        self.wall_num_width = 5
-
-        self.wall_height = 15
-        self.wall_width = 15
-
-        self.height = self.wall_height * (2 * self.wall_num_height + 1)
-        self.width = self.wall_width * (2 * self.wall_num_width + 1)
-
-        self.upscale = 9
-        self.initial_population_density = 0.5
-
-        self.trail_deposit = 5
-        self.trail_damping = 0.1
-        self.trail_filter_size = 3
-        self.trail_weight = 0.1
-
-        # food source settings
-        self.food_deposit = 10
-        self.food_damping = 0.1
-        self.food_filter_size = 3
-        self.food_weight = 1 - self.trail_weight
-        self.food_size = 3
-        self.num_food = 5
-
-        self.sensor_length = 4 # DECREASED
-        self.reproduction_threshold = 15
-        self.elimination_threshold = -10
-
-        # penalty for being far from food
-        self.starvation_penalty = 0.5
-        self.starvation_threshold = 0.1
-
-        # food pickup
-        self.food_pickup_threshold = 1
-        self.food_pickup_limit = self.food_deposit
-        self.food_drop_amount = 0.3
-
-        # visualization settings
-        self.display_food = False
-        self.display_trail = True
-        self.display_agents = True
-        self.display_food_sources = True
-        self.display_walls = True
-        self.display_history = True
-        # objective function visualization diagnostics
-        self.display_graph = True
-
-        # objective function parameters
-        self.triangle_agent_cutoff = 2
-        self.agent_cutoff = 1
-        self.patch_cutoff = 45
-        self.triangle_cutoff = 30
-        self.patch_edge_cutoff = 20
-        self.history_size = 30
-
-        assert (
-            self.food_size % 2 == 0 and self.wall_height % 2 == 0 and self.wall_width % 2 == 0
-        ) or (
-            self.food_size % 2 == 1 and self.wall_height % 2 == 1 and self.wall_width % 2 == 1
-        ), "both food and wall needs to be odd/even"
-
-        # generate random food sources
-
-        # assume a wall and empty space to each have a width of 1,
-        # sample from the empty spaces to get food locations, and
-        # scale these coordinates up according to the actual dimensions.
-        if seed is not None: np.random.seed(seed)
-        X, Y = np.meshgrid(np.arange(self.wall_num_width * 2 + 1), np.arange(self.wall_num_height * 2 + 1))
-        coordinates = np.vstack((Y.flatten(), X.flatten())).T  # [(y, x)]
-        mask = ~((coordinates[:, 0] % 2 != 0) & (coordinates[:, 1] % 2 != 0))  # filter out wall coordinates
-        coordinates = coordinates[mask]
-
-        # sample food coordinates and scale accordingly
-        food_choices = np.random.choice(range(len(coordinates)), size=(self.num_food,), replace=False)
-        food_coordinates = coordinates[food_choices]
-        self.foods_unscaled = copy.deepcopy(food_coordinates)
-        food_coordinates[:, 0] = food_coordinates[:, 0] * self.wall_height + self.wall_height // 2 - self.food_size // 2
-        food_coordinates[:, 1] = food_coordinates[:, 1] * self.wall_width + self.wall_width // 2 - self.food_size // 2
-        self.foods = food_coordinates
-
-        # save scaled versions of the complete list of non-wall coordinates,
-        # for use in objective function
-        self.all_coordinates_unscaled = copy.copy(coordinates)
-        coordinates[:, 0] = coordinates[:, 0] * self.wall_height + self.wall_height // 2
-        coordinates[:, 1] = coordinates[:, 1] * self.wall_width + self.wall_width // 2
-        self.all_coordinates_scaled = coordinates
 
 
 def check_keypresses(c, pause):
@@ -191,6 +101,7 @@ def run_with_gui(c, num_iter=np.inf):
     scene = Scene(c)
     pause = False
 
+    # step through the scenes
     i = 0
     while True:
         if not pause:
@@ -198,12 +109,13 @@ def run_with_gui(c, num_iter=np.inf):
             scene.step()
 
         draw(scene, screen, font, i)
-
         stop, pause = check_keypresses(c, pause)
+
         if stop or i >= num_iter:
             pygame.quit()
             return scene
 
+    # wait at the last scene
     while True:
         stop, pause = check_keypresses(c, pause)
         if stop:
@@ -213,15 +125,40 @@ def run_with_gui(c, num_iter=np.inf):
         draw(scene, screen, font, i)
 
 
-def run_headless(c, num_iter=20000):
+def run_headless(c, num_iter, process_id=None, results=None):
     """Run simulations headless on the gpu without gui."""
     scenes = [Scene(c)]
 
-    for _ in range(num_iter):
+    for _ in range(num_iter - 1):
         scenes[-1].step()
         scenes.append(copy.deepcopy(scenes[-1]))
 
+    if process_id is not None:
+        results['scenes'][process_id] = scenes
+        return
+
     return scenes
+
+
+def run_repeated(c, num_iter, repetitions=mp.cpu_count()):
+    manager = mp.Manager()
+    results = manager.dict()
+
+    results['scenes'] = manager.dict()
+
+    jobs = []
+
+    for process_id in range(repetitions):
+        jobs.append(mp.Process(
+            target=run_headless,
+            args=(c, num_iter, process_id, results)
+        ))
+        jobs[-1].start()
+
+    for process in jobs:
+        process.join()
+
+    return results['scenes'].values()
 
 
 if __name__ == '__main__':
@@ -229,7 +166,7 @@ if __name__ == '__main__':
     c = Config()
     # run an experiment with gui
     # t0 = time.time()
-    scene = run_with_gui(c, num_iter=np.inf)
+    scene = run_with_gui(c)
     # print(time.time() - t0)
 
     # run an experiment headless
@@ -237,3 +174,7 @@ if __name__ == '__main__':
     # scenes = run_headless(c, num_iter=10)
     # print(time.time() - t0)
     # visualise(scenes, c)
+
+    # sceness = run_repeated(c, num_iter=10)
+    # print(sceness)
+    # print(len(sceness), len(sceness[0]))

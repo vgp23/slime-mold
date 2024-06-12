@@ -38,6 +38,7 @@ class Graph:
         """Check if the graph is fully connected."""
         foods = copy.deepcopy(self.c.foods_unscaled)
 
+        # TODO make this adjustable so we can filter out graphs with any disconnected bits
         foods_out = self.food_nodes()
         visited = []
         canvisit = [foods_out.pop()]
