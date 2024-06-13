@@ -5,10 +5,15 @@ import copy
 class Graph:
 
     def __init__(self, adjacency_list, patches_filled, c):
-        self.mask = patches_filled  # mask to determine if a node is in the graph
         self.adj = adjacency_list   # neighbours for each node, -1 means no neighbour
-        self.c = c
+        self.mask = patches_filled  # mask to determine if a node is considered
 
+        # mask with only the nodes that actually have an edge
+        self.actual_mask = np.array([
+            any([neighbour != -1 for neighbour in neighbours]) for neighbours in self.adj])
+        self.nodes = list(np.where(self.actual_mask)[0])  # indices of nodes in adj list
+
+        self.c = c
         self.connected = self.fullyconnected()
 
 
@@ -34,33 +39,28 @@ class Graph:
         return (self.adj >= 0).sum() // 2
 
 
-    def fullyconnected(self):
+    def fullyconnected(self, only_foods=False):
         """Check if the graph is fully connected."""
-        foods = copy.deepcopy(self.c.foods_unscaled)
-
-        # TODO make this adjustable so we can filter out graphs with any disconnected bits
-        # TODO filter out single nodes without edges
-        foods_out = self.food_nodes()
+        nodes_out = self.food_nodes() if only_foods else copy.deepcopy(self.nodes)
         visited = []
-        canvisit = [foods_out.pop()]
+        canvisit = [nodes_out.pop()]
 
-        while len(foods_out) > 0 and len(canvisit) != 0:
+        while len(nodes_out) > 0 and len(canvisit) != 0:
             node = canvisit.pop()
             visited.append(node)
 
             for neighbour in self.neighbours(node):
                 if not neighbour in canvisit and not neighbour in visited:
                     canvisit.append(neighbour)
-                    if neighbour in foods_out:
-                        foods_out.remove(neighbour)
+                    if neighbour in nodes_out:
+                        nodes_out.remove(neighbour)
 
-        return len(foods_out) == 0
+        return len(nodes_out) == 0
 
 
     def mst(self):
         """Compute the size of a minimum spanning tree between the food sources,
         NOT considering the actual network!"""
-        # assert self.connected  # TODO uncomment me
 
         def dist(food1, food2):
             # Compute the manhatten distance between two food sources. Note, if
@@ -102,11 +102,48 @@ class Graph:
         return total_size
 
 
+    def edges(self):
+        """Return a list of all edges in the graph as [(node1, node2)]"""
+        edges = set()
+
+        for node in range(len(self.adj)):
+            neighbours = self.neighbours(node)
+
+            for neighbour in neighbours:
+                edge = tuple(sorted([node, neighbour]))
+
+                if edge not in edges:
+                    edges.add(edge)
+
+        return edges
+
+
     def fault_tolerance(self):
-        # check percentage of (part) edges that disconnect any of the food sources
-        pass
+        """Compute the percentage of edges that, when removed, disconnect any of the food sources."""
+        assert self.connected, 'only compute fault tolerance for fully connected graphs'
+
+        num_connected = 0
+        edges = self.edges()
+
+        for node1, node2 in edges:
+            node1_index_node2 = np.where(self.adj[node1] == node2)[0][0]
+            node2_index_node1 = np.where(self.adj[node2] == node1)[0][0]
+
+            # remove the edge
+            self.adj[node1][node1_index_node2] = -1
+            self.adj[node2][node2_index_node1] = -1
+
+            # check connectedness
+            if self.fullyconnected(only_foods=True):
+                num_connected += 1
+
+            # restore the edge
+            self.adj[node1][node1_index_node2] = node2
+            self.adj[node2][node2_index_node1] = node1
+
+        return num_connected / len(edges)
 
 
     def mst_actual(self):
-        # MST on the actual graph
-        pass
+        """Compute the actual MST size over the graph just between the food sources."""
+        assert self.connected, 'only compute the actual MST for fully connected graphs'

@@ -8,13 +8,16 @@ def load_data(dirname, parameter_setups=None):
     data = dict()
 
     for parameter_name in sorted(os.listdir(dirname)):
-        if parameter_name not in parameter_setups:
+        if parameter_setups is not None and parameter_name not in parameter_setups:
             continue
 
         data[parameter_name] = dict()
 
         for parameter_value in sorted(os.listdir(f'{dirname}/{parameter_name}')):
-            if float(parameter_value) not in parameter_setups[parameter_name]:
+            if (
+                parameter_setups is not None and
+                float(parameter_value) not in parameter_setups[parameter_name]
+            ):
                 continue
 
             print('loading', parameter_name, '=', parameter_value)
@@ -25,22 +28,41 @@ def load_data(dirname, parameter_setups=None):
     return data
 
 
-if __name__ == '__main__':
-
-    # specify here which experiments you want to load in
-    parameter_setups = {
-        'initial_population_density': [0.01, 0.04, 0.07],
-        'reproduction_threshold': [10, 15, 20],
-    }
-    data = load_data('../results', parameter_setups)
-
+def show_connectedness(data):
     for parameter_name in data:
         for parameter_value in data[parameter_name]:
             results = data[parameter_name][parameter_value]
 
+            print(parameter_name, '=', parameter_value)
+
             for index, repetition in enumerate(results):
                 print(f'rep {index + 1}: ', end='')
                 for scene in repetition:
-                    print(scene.graph().mst(), scene.graph().cost(), end='   ')
+                    print(
+                        str(scene.graph().connected)[0],
+                        str(scene.graph().fullyconnected(only_foods=True))[0],
+                        end='   '
+                    )
                 print()
 
+
+
+if __name__ == '__main__':
+
+    # specify here which experiments you want to load in
+    parameter_setups = {
+        'initial_population_density': [0.01, 0.04],#, 0.07],
+        # 'reproduction_threshold': [10, 15, 20],
+    }
+    data = load_data('../results', parameter_setups)
+
+    scenes = data['initial_population_density']['0.04'][0]
+
+    for scene in scenes:
+        graph = scene.graph()
+        if graph.connected:
+            print(graph.cost(), graph.fault_tolerance())
+        else:
+            print('nvt')
+
+    visualise(scenes)
