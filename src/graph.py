@@ -76,34 +76,34 @@ class Graph:
         return dist_cache
 
 
-    def mst(self, f_distance):
+    def mst(self, f_distance, nodes=None):
         """Compute the size of a minimum spanning tree between the food sources,
         using the given distance function which gives the distance between two
         food sources."""
+        if nodes is None: nodes = self.c.foods_unscaled
+        nodes = list(map(tuple, nodes))
+        dist_cache = self.distance_cache(nodes, f_distance)
 
-        foods = list(map(tuple, self.c.foods_unscaled))
-        dist_cache = self.distance_cache(foods, f_distance)
-
-        # keep track of which food sources we have already added to the MST
-        foods_out = list(range(1, len(foods)))
-        foods_in = [0]
+        # keep track of which node sources we have already added to the MST
+        nodes_out = list(range(1, len(nodes)))
+        nodes_in = [0]
         total_size = 0
 
-        while len(foods_out) > 0:
-            # find the minimum length edge that connects a node in food_out to food_in
-            min_food = -1  # put the food index here
+        while len(nodes_out) > 0:
+            # find the minimum length edge that connects a node in node_out to node_in
+            min_node = -1  # put the node index here
             min_dist = np.inf
 
-            for food_out in foods_out:
-                for food_in in foods_in:
-                    if (d := dist_cache[foods[food_out]][foods[food_in]]) < min_dist:
-                        min_food = food_out
+            for node_out in nodes_out:
+                for node_in in nodes_in:
+                    if (d := dist_cache[nodes[node_out]][nodes[node_in]]) < min_dist:
+                        min_node = node_out
                         min_dist = d
 
             total_size += min_dist
 
-            foods_out.remove(min_food)
-            foods_in.append(min_food)
+            nodes_out.remove(min_node)
+            nodes_in.append(min_node)
 
         return total_size
 
@@ -112,21 +112,28 @@ class Graph:
         """Compute the size of a minimum spanning tree between the food sources,
         NOT considering the actual network!"""
 
-        def f_manhatten_distance(food1, food2):
-            # Compute the manhatten distance between two food sources. Note, if
-            # both are in horizontal or vertical alignment and this alignment
+        def f_manhatten_distance(node1, node2):
+            # Compute the manhatten distance between two nodes. Note, if both
+            # are in horizontal or vertical alignment and this alignment
             # coincides with a wall, then we need to go around the wall, so we
             # add 2 to the distance.
 
-            manhatten_distance = np.abs(food1[0] - food2[0]) + np.abs(food1[1] - food2[1])
+            manhatten_distance = np.abs(node1[0] - node2[0]) + np.abs(node1[1] - node2[1])
             if (
-                (food1[0] == food2[0] and food1[0] % 2 == 1) or
-                (food1[1] == food2[1] and food1[1] % 2 == 1)
+                (node1[0] == node2[0] and node1[0] % 2 == 1) or
+                (node1[1] == node2[1] and node1[1] % 2 == 1)
             ):
                 manhatten_distance += 2
             return manhatten_distance
 
         return self.mst(f_manhatten_distance)
+
+
+    def mst_actual(self):
+        """Compute the actual MST size over the graph just between the food sources."""
+        assert self.connected, 'only compute the actual MST for fully connected graphs'
+
+
 
 
     def edges(self):
@@ -146,7 +153,7 @@ class Graph:
 
 
     def fault_tolerance(self):
-        """Compute the percentage of edges that, when removed, disconnect any of the food sources."""
+        """Percentage of edges that, when removed, disconnect any of the food sources."""
         assert self.connected, 'only compute fault tolerance for fully connected graphs'
 
         num_connected = 0
@@ -169,8 +176,3 @@ class Graph:
             self.adj[node2][node2_index_node1] = node1
 
         return num_connected / len(edges)
-
-
-    def mst_actual(self):
-        """Compute the actual MST size over the graph just between the food sources."""
-        assert self.connected, 'only compute the actual MST for fully connected graphs'
