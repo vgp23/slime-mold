@@ -152,6 +152,7 @@ def run_headless_concurrent(c, num_iter, process_id, results):
     for _ in range(num_iter - 1):
         scene.step()
 
+    print('.', end='')
     results[process_id] = scene
 
 
@@ -201,9 +202,9 @@ def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, n
             # run all food setups a few times
             results = []
             for i in range(food_setup_repetitions):
-                print(f'repetition {i + 1}...', end='')
+                print(f'repetition {i + 1} ', end='')
                 results.append(run_repeated(configs, num_iter))
-                print(f'done')
+                print(f' done')
 
             # save the results to a file
             filename = f'{dirname}/{parameter_value}'
