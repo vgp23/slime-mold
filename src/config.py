@@ -22,8 +22,11 @@ class Config:
         self.wall_height = 15
         self.wall_width = 15
 
-        self.height = self.wall_height * (2 * self.wall_num_height + 1)
-        self.width = self.wall_width * (2 * self.wall_num_width + 1)
+        self.height_unscaled = 2 * self.wall_num_height + 1
+        self.width_unscaled = 2 * self.wall_num_width + 1
+
+        self.height = self.wall_height * self.height_unscaled
+        self.width = self.wall_width * self.width_unscaled
 
         # initialization
         self.initial_population_density = 0.5
@@ -100,9 +103,7 @@ class Config:
 
     def coordinates(self):
         """Return all unscaled coordinates not in walls."""
-        X, Y = np.meshgrid(
-            np.arange(self.wall_num_width * 2 + 1), np.arange(self.wall_num_height * 2 + 1)
-        )
+        X, Y = np.meshgrid(np.arange(self.width_unscaled), np.arange(self.height_unscaled))
         coordinates = np.vstack((Y.flatten(), X.flatten())).T  # [(y, x)]
         mask = ~((coordinates[:, 0] % 2 != 0) & (coordinates[:, 1] % 2 != 0))
         coordinates = coordinates[mask]

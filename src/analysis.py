@@ -62,8 +62,7 @@ if __name__ == '__main__':
         graph = scene.graph()
         print(graph.mst_perfect(), end=' ')
         if graph.connected:
-            # visualise([scene])
-            print(graph.mst_actual(), graph.mst_perfect_approx(), graph.mst_actual_approx(), end='')
+            print(graph.mst_actual(), end='')
         print()
 
     # visualise(scenes)
