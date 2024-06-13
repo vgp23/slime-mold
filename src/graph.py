@@ -7,15 +7,20 @@ import copy
 class Graph:
 
     def __init__(self, adjacency_list, patches_filled, c):
+        self.c = c
+
         self.adj = adjacency_list   # neighbours for each node, -1 means no neighbour
         self.mask = patches_filled  # mask to determine if a node is considered
 
-        # mask with only the nodes that actually have an edge
+        # mask with only the nodes that actually have an edge (except food nodes)
+        food_nodes = self.food_nodes()
         self.actual_mask = np.array([
-            any([neighbour != -1 for neighbour in neighbours]) for neighbours in self.adj])
+            node in food_nodes or any([neighbour != -1 for neighbour in neighbours])
+            for node, neighbours in enumerate(self.adj)
+        ])
         self.nodes = list(np.where(self.actual_mask)[0])  # indices of nodes in adj list
 
-        self.c = c
+        # save whether the network is fully connected
         self.connected = self.fullyconnected()
 
 

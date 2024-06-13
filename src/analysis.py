@@ -46,23 +46,38 @@ def show_connectedness(data):
                 print()
 
 
+def show_mst(data):
+    for parameter_name in data:
+        for parameter_value in data[parameter_name]:
+            results = data[parameter_name][parameter_value]
+
+            print(parameter_name, '=', parameter_value)
+
+            for index, repetition in enumerate(results):
+                print(f'rep {index + 1}: ', end='')
+                for scene in repetition:
+                    graph = scene.graph()
+
+                    print(graph.mst_perfect(), end=' ')
+                    if graph.connected:
+                        print(graph.mst_actual(), end=' ')
+                    else:
+                        print('   ', end='')
+                    print('  ', end='')
+
+                print()
+
 
 if __name__ == '__main__':
 
     # specify here which experiments you want to load in
     parameter_setups = {
-        'initial_population_density': [0.01, 0.04],#, 0.07],
-        # 'reproduction_threshold': [10, 15, 20],
+        # 'initial_population_density': [0.01, 0.04],
+        'reproduction_threshold': [30],
     }
     data = load_data('../results', parameter_setups)
 
-    scenes = data['initial_population_density']['0.04'][0]
+    # scenes = data['initial_population_density']['0.04'][0]
+    show_mst(data)
 
-    for scene in scenes:
-        graph = scene.graph()
-        print(graph.mst_perfect(), end=' ')
-        if graph.connected:
-            print(graph.mst_actual(), end='')
-        print()
-
-    # visualise(scenes)
+    visualise(data['reproduction_threshold']['30'][2])
