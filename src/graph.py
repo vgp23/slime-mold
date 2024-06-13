@@ -19,9 +19,22 @@ class Graph:
 
     def coord_to_node(self, coord):
         """Convert a coordinate (of food) to the node index in the adjacency list."""
+        # make sure to use a hashable coordinate type
+        coord = tuple(coord)
+
+        # use a cache dict to prevent the expensive lookup whenever possible
+        try:
+            if coord in self.coord_to_node_cache:
+                return self.coord_to_node_cache[coord]
+        except AttributeError:
+            self.coord_to_node_cache = dict()
+
+        # lookup the coordinate in the big coordinate list
         for index, c in enumerate(self.c.all_coordinates_unscaled):
             if np.array_equal(coord, c):
+                self.coord_to_node_cache[coord] = index
                 return index
+
         raise LookupError
 
 
@@ -76,12 +89,11 @@ class Graph:
         return dist_cache
 
 
-    def mst(self, f_distance, nodes=None):
+    def mst(self, f_distance):
         """Compute the size of a minimum spanning tree between the food sources,
         using the given distance function which gives the distance between two
         food sources."""
-        if nodes is None: nodes = self.c.foods_unscaled
-        nodes = list(map(tuple, nodes))
+        nodes = list(map(tuple, self.c.foods_unscaled))  # this is a list of coordinates
         dist_cache = self.distance_cache(nodes, f_distance)
 
         # keep track of which node sources we have already added to the MST
@@ -108,32 +120,55 @@ class Graph:
         return total_size
 
 
+    def f_manhatten_distance(self, coord1, coord2):
+        """Compute the manhatten distance between two coordinates. Note, if both are
+        in horizontal or vertical alignment and this alignment coincides with a
+        wall, then we need to go around the wall, so we add 2 to the distance."""
+        manhatten_distance = np.abs(coord1[0] - coord2[0]) + np.abs(coord1[1] - coord2[1])
+        if ((coord1[0] == coord2[0] and coord1[0] % 2 == 1) or
+            (coord1[1] == coord2[1] and coord1[1] % 2 == 1)
+        ):
+            manhatten_distance += 2
+        return manhatten_distance
+
+
     def mst_perfect(self):
         """Compute the size of a minimum spanning tree between the food sources,
         NOT considering the actual network!"""
+        return self.mst(self.f_manhatten_distance)
 
-        def f_manhatten_distance(node1, node2):
-            # Compute the manhatten distance between two nodes. Note, if both
-            # are in horizontal or vertical alignment and this alignment
-            # coincides with a wall, then we need to go around the wall, so we
-            # add 2 to the distance.
 
-            manhatten_distance = np.abs(node1[0] - node2[0]) + np.abs(node1[1] - node2[1])
-            if (
-                (node1[0] == node2[0] and node1[0] % 2 == 1) or
-                (node1[1] == node2[1] and node1[1] % 2 == 1)
-            ):
-                manhatten_distance += 2
-            return manhatten_distance
+    def f_actual_distance(self, coord1, coord2):
+        """Compute the distance between coord1 and coord2 by doing a breadth
+        first search through the network."""
 
-        return self.mst(f_manhatten_distance)
+        node1 = self.coord_to_node(coord1)
+        node2 = self.coord_to_node(coord2)
+
+        def recurs(frontier, goal_node):
+            if goal_node in frontier:
+                return 0
+
+            next_frontier = set()
+            for node in frontier:
+                neighbours = self.neighbours(node)
+
+                # stop early expanding the frontier
+                if goal_node in neighbours:
+                    return 1
+
+                next_frontier.update(neighbours)
+
+            return recurs(next_frontier, goal_node) + 1
+
+        frontier = {node1}
+        return recurs(frontier, node2)
 
 
     def mst_actual(self):
         """Compute the actual MST size over the graph just between the food sources."""
         assert self.connected, 'only compute the actual MST for fully connected graphs'
-
-
+        return self.mst(self.f_actual_distance)
 
 
     def edges(self):

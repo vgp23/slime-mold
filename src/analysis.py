@@ -60,6 +60,9 @@ if __name__ == '__main__':
 
     for scene in scenes:
         graph = scene.graph()
-        print(graph.mst_perfect())
+        print(graph.mst_perfect(), end=' ')
+        if graph.connected:
+            print(graph.mst_actual(), end='')
+        print()
 
     visualise(scenes)
