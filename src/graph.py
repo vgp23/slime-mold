@@ -1,3 +1,5 @@
+import matplotlib.pyplot as plt
+import networkx as nx
 import numpy as np
 import copy
 
@@ -169,6 +171,33 @@ class Graph:
         """Compute the actual MST size over the graph just between the food sources."""
         assert self.connected, 'only compute the actual MST for fully connected graphs'
         return self.mst(self.f_actual_distance)
+
+
+    def mst_approx(self, G, terminal_nodes):
+        assert self.connected, 'only compute the actual MST for fully connected graphs'
+        steiner_tree = nx.algorithms.approximation.steiner_tree(G, terminal_nodes)
+        return steiner_tree.number_of_edges()
+
+
+    def mst_actual_approx(self):
+        return self.mst_approx(nx.Graph(self.edges()), self.food_nodes())
+
+
+    def mst_perfect_approx(self):
+        G = nx.grid_2d_graph(
+            range(self.c.wall_num_height * 2 + 1),
+            range(self.c.wall_num_width * 2 + 1)
+        )
+
+        for y in range(self.c.wall_num_height * 2 + 1):
+            for x in range(self.c.wall_num_width * 2 + 1):
+                if y % 2 == 1 and x % 2 == 1:
+                    G.remove_node((y, x))
+
+        nx.relabel_nodes(G, {coord: self.coord_to_node(coord) for coord in G.nodes}, copy=False)
+        # print(G.nodes)
+
+        return self.mst_approx(G, self.food_nodes())
 
 
     def edges(self):
