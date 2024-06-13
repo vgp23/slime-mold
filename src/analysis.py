@@ -60,9 +60,6 @@ if __name__ == '__main__':
 
     for scene in scenes:
         graph = scene.graph()
-        if graph.connected:
-            print(graph.cost(), graph.fault_tolerance())
-        else:
-            print('nvt')
+        print(graph.mst_perfect())
 
     visualise(scenes)
