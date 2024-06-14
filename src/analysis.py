@@ -173,6 +173,7 @@ def plot_all(data, measures):
         pathlib.Path('../figures').mkdir(parents=True, exist_ok=True)
         plt.savefig('../figures/' + parameter_name + '.png', dpi=300, bbox_inches='tight')
 
+        plt.close()
         # plt.show()
 
 
