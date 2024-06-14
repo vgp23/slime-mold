@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import jsonpickle
 import os
 import time
+import pathlib
 
 
 def load_data(dirname, parameter_setups=None):
@@ -14,16 +15,16 @@ def load_data(dirname, parameter_setups=None):
 
         data[parameter_name] = dict()
 
-        for parameter_value in sorted(os.listdir(f'{dirname}/{parameter_name}')):
+        for parameter_value in sorted(map(float, os.listdir(f'{dirname}/{parameter_name}'))):
             if (
                 parameter_setups is not None and
-                float(parameter_value) not in parameter_setups[parameter_name]
+                parameter_value not in parameter_setups[parameter_name]
             ):
                 continue
 
             print('loading', parameter_name, '=', parameter_value)
 
-            with open(f'{dirname}/{parameter_name}/{parameter_value}', 'r') as f:
+            with open(f'{dirname}/{parameter_name}/{parameter_value:g}', 'r') as f:
                 data[parameter_name][parameter_value] = jsonpickle.decode(f.read())
 
     return data
@@ -69,39 +70,52 @@ def show_mst(data):
                 print()
 
 
-def check_enough(results):
-    count = 0
-    for repetition in results:
-        for scene in repetition:
-            if scene.graph().connected:
-                count += 1
-    return count < len(results) * len(results[0]) * 0.7
+def compute_means(graphs, measures):
+    """Compute the means per food_setup for each of the measures."""
+    measures_means_reps = {measure: [] for measure in measures}  # save the repetition means
 
+    for food_setup in range(len(graphs[0])):
+        measure_datas = {measure: [] for measure in measures}
 
-def compute_means(results):
-    cost_means, perf_means, ftol_means = [], [], []
-
-    for s in range(len(results[0])):
-        for r in range(len(results)):
-            scene = results[r][s]
-            graph = scene.graph()
-
-            cost_valid_reps, perf_valid_reps, ftol_valid_reps = [], [], []
+        for repetition in range(len(graphs)):
+            graph = graphs[repetition][food_setup]
 
             if graph.connected:
-                cost_valid_reps.append(graph.mst_perfect() / graph.cost())
-                perf_valid_reps.append(graph.mst_perfect() / graph.mst_actual())
-                ftol_valid_reps.append(graph.fault_tolerance())
+                for measure, measure_info in measures.items():
+                    measure_datas[measure].append(measure_info['f'](graph))
 
-            if len(cost_valid_reps) > 0:
-                cost_means.append(sum(cost_valid_reps) / len(cost_valid_reps))
-                perf_means.append(sum(perf_valid_reps) / len(perf_valid_reps))
-                ftol_means.append(sum(ftol_valid_reps) / len(ftol_valid_reps))
+        for measure, measure_data in measure_datas.items():
+            if len(measure_data) > 0:
+                measures_means_reps[measure].append(sum(measure_data) / len(measure_data))
 
-    return np.array(cost_means), np.array(perf_means), np.array(ftol_means)
+    # saves the final means
+    measures_mean_std = {
+        measure: (np.mean(measure_means), np.std(measure_means))
+        for measure, measure_means in measures_means_reps.items()
+    }
+    return measures_mean_std
 
 
-def plot_oneline(means, stds, label, parameter_name, color):
+def compute_connectedness(graphs):
+    return sum(sum(
+        [[int(graph.connected) for graph in repetition] for repetition in graphs], []
+    )) / (len(graphs) * len(graphs[0]))
+
+
+def scenes_to_graphs(results):
+    return [[scene.graph() for scene in repetition] for repetition in results]
+
+
+def check_enough(graphs):
+    count = 0
+    for repetition in graphs:
+        for graph in repetition:
+            if graph.connected:
+                count += 1
+    return count < len(graphs) * len(graphs[0]) * 0.7
+
+
+def plot_oneline(data, parameter_name, means, stds, label, color):
     plt.fill_between(means.keys(),
         np.array(list(means.values())) + np.array(list(stds.values())),
         np.array(list(means.values())) - np.array(list(stds.values())),
@@ -112,50 +126,84 @@ def plot_oneline(means, stds, label, parameter_name, color):
     plt.plot(means.keys(), means.values(), color=color, label=label)
 
     plt.xlabel(parameter_name)
-    plt.xlim([
-        min(map(float, data[parameter_name])),
-        max(map(float, data[parameter_name]))
-    ])
+    plt.xlim([min(data[parameter_name]), max(data[parameter_name])])
+    plt.ylim([0, 1])
 
 
-def add_means(means_dict, stds_dict, means, parameter_value):
-    means_dict[float(parameter_value)] = np.mean(means)
-    stds_dict[float(parameter_value)] = np.std(means)
+def plot_connected(data, parameter_name, total_connected, color):
+    values = list(data[parameter_name].keys())
+
+    plt.scatter(values, total_connected, color=color,)
+    plt.plot(values, total_connected, color=color, label='% connected')
+
+    plt.xlabel(parameter_name)
+    plt.xlim([min(data[parameter_name]), max(data[parameter_name])])
+    plt.ylim([0, 1])
 
 
-def plot_all(data):
+def plot_all(data, measures):
     for parameter_name in data:
-        cost_means, cost_stds = {}, {}
-        perf_means, perf_stds = {}, {}
-        ftol_means, ftol_stds = {}, {}
+        final_measures_means_stds = {measure: (dict(), dict(), info) for measure, info in measures.items()}
+        total_connected = []
 
         for parameter_value in data[parameter_name]:
             print('processing', parameter_name, '=', parameter_value)
             results = data[parameter_name][parameter_value]
+            graphs = scenes_to_graphs(results)
 
-            if check_enough(results):
+            total_connected.append(compute_connectedness(graphs))
+
+            if check_enough(graphs):
                 print('not enough data for this batch')
                 continue
 
-            means_cost, means_perf, means_ftol = compute_means(results)
+            measures_mean_std = compute_means(graphs, measures)
+            for measure, (mean, std) in measures_mean_std.items():
+                final_measures_means_stds[measure][0][parameter_value] = mean
+                final_measures_means_stds[measure][1][parameter_value] = std
 
-            add_means(cost_means, cost_stds, means_cost, parameter_value)
-            add_means(perf_means, perf_stds, means_perf, parameter_value)
-            add_means(ftol_means, ftol_stds, means_ftol, parameter_value)
-
-        plot_oneline(cost_means, cost_stds, '$1 / \\mathrm{TL_{MRST}}$', parameter_name, 'tab:blue')
-        plot_oneline(perf_means, perf_stds, '$\\mathrm{MD_{MRST}}$', parameter_name, 'tab:orange')
-        plot_oneline(ftol_means, ftol_stds, '$\\mathrm{FT}$', parameter_name, 'tab:green')
+        # plot all data
+        for measure, (means, stds, info) in final_measures_means_stds.items():
+            plot_oneline(data, parameter_name, means, stds, info['name'], info['color'])
+        plot_connected(data, parameter_name, total_connected, 'tab:purple')
 
         plt.legend()
-        plt.show()
+
+        # save the figure
+        pathlib.Path('../figures').mkdir(parents=True, exist_ok=True)
+        plt.savefig('../figures/' + parameter_name + '.png', dpi=300, bbox_inches='tight')
+
+        # plt.show()
 
 
 if __name__ == '__main__':
+    measures = {
+        'cost': {
+            'f': lambda graph: graph.mst_perfect() / graph.cost(),
+            'name': '1 / $\\mathrm{TL_{MRST}}$',
+            'color': 'tab:blue',
+        },
+        'performance': {
+            'f': lambda graph: graph.mst_perfect() / graph.mst_actual(),
+            'name': '$\\mathrm{MD_{MRST}}$',
+            'color': 'tab:orange'
+        },
+        'fault tolerance': {
+            'f': lambda graph: graph.fault_tolerance(),
+            'name': '$\\mathrm{FT}$',
+            'color': 'tab:green'
+        },
+        'efficiency': {
+            'f': lambda graph: graph.fault_tolerance() / (graph.cost() / graph.mst_perfect()),
+            'name': '$\\mathrm{FT}\\ /\\ \\mathrm{TL_{MRST}}$',
+            'color': 'tab:red'
+        },
+    }
+
     # specify here which experiments you want to load in
     # parameter_setups = {
-    #     'initial_population_density': [0.01, 0.04, 0.07, .1, .3, .5],
-    #     # 'reproduction_threshold': [30],
+    #     'initial_population_density': [.01, .04, .07, .1, .3, .5],
+    #     'elimination_threshold': [-5, -10, -15, -20, -25, -30]
     # }
     data = load_data('../results')#, parameter_setups)
-    plot_all(data)
+    plot_all(data, measures)

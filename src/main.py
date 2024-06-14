@@ -207,7 +207,7 @@ def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, n
                 print(f' done')
 
             # save the results to a file
-            filename = f'{dirname}/{parameter_value}'
+            filename = f'{dirname}/{float(parameter_value):g}'
             with open(filename, 'w') as f:
                 f.write(jsonpickle.encode(results))
                 print(f'saved to {filename}')
