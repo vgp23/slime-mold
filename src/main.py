@@ -217,7 +217,7 @@ def run_experiments(parameter_setups, num_food_setups, food_setup_repetitions, n
 
 if __name__ == '__main__':
     # generate a configuration to the experiment with
-    # c = Config(seed=0, reproduction_threshold=50)
+    # c = Config(seed=0)
 
     # run an experiment with gui
     # t0 = time.time()
@@ -230,6 +230,7 @@ if __name__ == '__main__':
     # print(time.time() - t0)
     # visualise(scenes, c)
 
+    # specify here which parameters you want to vary during the experiments
     parameter_setups = {
         'initial_population_density': [0.01, 0.04, 0.07, 0.1, 0.3, 0.5],
         'reproduction_threshold': [10, 15, 20, 25, 30, 35],
