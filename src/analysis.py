@@ -232,14 +232,13 @@ if __name__ == '__main__':
     }
 
     # specify here which experiments you want to load in
-    parameter_setups = {
-        # 'initial_population_density': [.01, .04, .07, .1, .3, .5],
-        # 'elimination_threshold': [-5, -10, -15, -20, -25, -30]
-        'starvation_penalty': [0.3, 0.6]
-    }
+    # parameter_setups = {
+    #     'initial_population_density': [.01, .04, .07, .1, .3, .5],
+    #     'elimination_threshold': [-5, -10, -15, -20, -25, -30]
+    # }
 
     # actually load the data
-    data = load_data('../results', parameter_setups)
+    # data = load_data('../results', parameter_setups)
     # data = load_data('../results') # load all data
 
     # plot_all(data, measures)   # plot all measures
@@ -250,13 +249,13 @@ if __name__ == '__main__':
 
 
     # display specific scenes with display settings
-    scenes = data['starvation_penalty'][0.3][0]
+    # scenes = data['initial_population_density'][.01][0]
 
-    def display_settings(scenes):
-        for scene in scenes:
-            scene.c.display_history = True
-            scene.c.display_trail = False
-            scene.c.display_walls = False
+    # def display_settings(scenes):
+    #     for scene in scenes:
+    #         scene.c.display_history = True
+    #         scene.c.display_trail = False
+    #         scene.c.display_walls = False
 
-    display_settings(scenes)
-    visualise(scenes)
+    # display_settings(scenes)
+    # visualise(scenes)
