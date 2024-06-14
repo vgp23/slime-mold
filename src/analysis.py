@@ -70,8 +70,8 @@ def show_mst(data):
                 print()
 
 
-def compute_means(graphs, measures):
-    """Compute the means per food_setup for each of the measures."""
+def compute_means_reps(graphs, measures):
+    """Compute the means per repetition for each of the measures."""
     measures_means_reps = {measure: [] for measure in measures}  # save the repetition means
 
     for food_setup in range(len(graphs[0])):
@@ -88,12 +88,16 @@ def compute_means(graphs, measures):
             if len(measure_data) > 0:
                 measures_means_reps[measure].append(sum(measure_data) / len(measure_data))
 
-    # saves the final means
-    measures_mean_std = {
+    return measures_means_reps
+
+
+def compute_means(graphs, measures):
+    """Compute the means and stds per food_setup for each of the measures."""
+    measures_means_reps = compute_means_reps(graphs, measures)
+    return {
         measure: (np.mean(measure_means), np.std(measure_means))
         for measure, measure_means in measures_means_reps.items()
     }
-    return measures_mean_std
 
 
 def compute_connectedness(graphs):
@@ -167,7 +171,8 @@ def plot_all(data, measures):
             plot_oneline(data, parameter_name, means, stds, info['name'], info['color'])
         plot_connected(data, parameter_name, total_connected, 'tab:purple')
 
-        plt.legend()
+        if not 'starvation_penalty' in data or parameter_name == 'starvation_penalty':
+            plt.legend()
 
         # save the figure
         pathlib.Path('../figures').mkdir(parents=True, exist_ok=True)
@@ -175,6 +180,30 @@ def plot_all(data, measures):
 
         plt.close()
         # plt.show()
+
+
+def plot_hist(data, measures):
+    for parameter_name in data:
+        final_measures_means_reps = {measure: (dict(), info) for measure, info in measures.items()}
+
+        for parameter_value in data[parameter_name]:
+            print('processing', parameter_name, '=', parameter_value)
+            results = data[parameter_name][parameter_value]
+            graphs = scenes_to_graphs(results)
+
+            if check_enough(graphs):
+                print('not enough data for this batch')
+                continue
+
+            measures_means_reps = compute_means_reps(graphs, measures)
+            for measure, means_reps in measures_means_reps.items():
+                final_measures_means_reps[measure][0][parameter_value] = means_reps
+
+        for measure, (all_value_data, info) in final_measures_means_reps.items():
+            for parameter_value, value_data in all_value_data.items():
+                plt.hist(value_data, bins=5)
+                plt.xlabel(f'{info['name']}, {parameter_name} = {parameter_value}')
+                plt.show()
 
 
 if __name__ == '__main__':
@@ -204,7 +233,8 @@ if __name__ == '__main__':
     # specify here which experiments you want to load in
     # parameter_setups = {
     #     'initial_population_density': [.01, .04, .07, .1, .3, .5],
-    #     'elimination_threshold': [-5, -10, -15, -20, -25, -30]
+    #     # 'elimination_threshold': [-5, -10, -15, -20, -25, -30]
     # }
     data = load_data('../results')#, parameter_setups)
-    plot_all(data, measures)
+    # plot_all(data, measures)
+    plot_hist(data, measures)
